@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -15,9 +17,11 @@ import (
 	"github.com/zjrosen/perles/internal/flags"
 	appgit "github.com/zjrosen/perles/internal/git/application"
 	domaingit "github.com/zjrosen/perles/internal/git/domain"
+	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/orchestration/client"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
+	"github.com/zjrosen/perles/internal/orchestration/fabric/domain"
 	fabricpersist "github.com/zjrosen/perles/internal/orchestration/fabric/persistence"
 	fabricrepo "github.com/zjrosen/perles/internal/orchestration/fabric/repository"
 	"github.com/zjrosen/perles/internal/orchestration/session"
@@ -2079,6 +2083,177 @@ func TestSupervisor_RestoreFabricState_RestoresChannelsAndMessages(t *testing.T)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 	require.Equal(t, "Test message for restore", messages[0].Content)
+}
+
+func TestSupervisor_RestoreFabricState_RestoresReplyContinuityAfterColdResume(t *testing.T) {
+	cfg, _, _ := newTestSupervisorConfig(t)
+	supervisor, err := NewSupervisor(cfg)
+	require.NoError(t, err)
+
+	ds := supervisor.(*defaultSupervisor)
+	inst := newTestInstance(t, "test-workflow")
+	inst.SessionDir = t.TempDir()
+
+	logger, err := fabricpersist.NewEventLogger(inst.SessionDir)
+	require.NoError(t, err)
+
+	seedInfra := createMinimalInfrastructureWithFabric(t)
+	seedInfra.Core.FabricService.SetEventHandler(logger.HandleEvent)
+	require.NoError(t, seedInfra.Core.FabricService.InitSession("coordinator"))
+
+	rootMessage, err := seedInfra.Core.FabricService.SendMessage(fabric.SendMessageInput{
+		ChannelSlug: "general",
+		Content:     "Root message for restore",
+		CreatedBy:   "coordinator",
+	})
+	require.NoError(t, err)
+
+	expectedReply, err := seedInfra.Core.FabricService.Reply(fabric.ReplyInput{
+		MessageID: rootMessage.ID,
+		Content:   "Reply restored via cold resume",
+		CreatedBy: "worker-1",
+	})
+	require.NoError(t, err)
+	require.NoError(t, logger.Close())
+
+	inst.Infrastructure = createMinimalInfrastructureWithFabric(t)
+	err = ds.restoreFabricState(inst)
+	require.NoError(t, err)
+
+	messages, err := inst.Infrastructure.Core.FabricService.ListMessages("general", 10)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, rootMessage.ID, messages[0].ID)
+	require.Equal(t, "Root message for restore", messages[0].Content)
+
+	replies, err := inst.Infrastructure.Core.FabricService.GetReplies(rootMessage.ID)
+	require.NoError(t, err)
+	require.Len(t, replies, 1)
+	require.Equal(t, expectedReply.ID, replies[0].ID)
+	require.Equal(t, "Reply restored via cold resume", replies[0].Content)
+}
+
+func TestSupervisor_RestoreFabricState_ReplyMissingParentIDSkipsWithDiagnostic(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "supervisor-restore.log")
+	closeLogger, err := log.InitWithTeaLog(logPath, "supervisor-test")
+	require.NoError(t, err)
+	log.SetEnabled(true)
+	defer closeLogger()
+
+	cfg, _, _ := newTestSupervisorConfig(t)
+	supervisor, err := NewSupervisor(cfg)
+	require.NoError(t, err)
+
+	ds := supervisor.(*defaultSupervisor)
+	inst := newTestInstance(t, "test-workflow")
+	inst.SessionDir = t.TempDir()
+
+	logger, err := fabricpersist.NewEventLogger(inst.SessionDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	logger.HandleEvent(fabric.NewChannelCreatedEvent(&domain.Thread{
+		ID:        "ch-general",
+		Type:      domain.ThreadChannel,
+		Slug:      "general",
+		Title:     "General",
+		CreatedAt: now,
+		CreatedBy: "SYSTEM",
+	}))
+	logger.HandleEvent(fabric.NewMessagePostedEvent(&domain.Thread{
+		ID:        "msg-1",
+		Type:      domain.ThreadMessage,
+		Content:   "Root message",
+		Kind:      string(domain.KindInfo),
+		CreatedAt: now.Add(time.Second),
+		CreatedBy: "coordinator",
+	}, "ch-general", "general"))
+	logger.HandleEvent(fabric.Event{
+		Type:      fabric.EventReplyPosted,
+		Timestamp: now.Add(2 * time.Second),
+		ChannelID: "ch-general",
+		Thread: &domain.Thread{
+			ID:        "reply-1",
+			Type:      domain.ThreadMessage,
+			Content:   "Reply without parent id",
+			Kind:      string(domain.KindResponse),
+			CreatedAt: now.Add(2 * time.Second),
+			CreatedBy: "worker-1",
+		},
+	})
+	require.NoError(t, logger.Close())
+
+	inst.Infrastructure = createMinimalInfrastructureWithFabric(t)
+	err = ds.restoreFabricState(inst)
+	require.NoError(t, err)
+
+	replies, err := inst.Infrastructure.Core.FabricService.GetReplies("msg-1")
+	require.NoError(t, err)
+	require.Len(t, replies, 0)
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	content := string(data)
+	require.Contains(t, content, "diagnostic=fabric_restore_reply_skipped")
+	require.Contains(t, content, "reason=missing_parent_id")
+}
+
+func TestSupervisor_RestoreFabricState_ReplyUnresolvedParentSkipsWithDiagnostic(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "supervisor-restore.log")
+	closeLogger, err := log.InitWithTeaLog(logPath, "supervisor-test")
+	require.NoError(t, err)
+	log.SetEnabled(true)
+	defer closeLogger()
+
+	cfg, _, _ := newTestSupervisorConfig(t)
+	supervisor, err := NewSupervisor(cfg)
+	require.NoError(t, err)
+
+	ds := supervisor.(*defaultSupervisor)
+	inst := newTestInstance(t, "test-workflow")
+	inst.SessionDir = t.TempDir()
+
+	logger, err := fabricpersist.NewEventLogger(inst.SessionDir)
+	require.NoError(t, err)
+
+	now := time.Now()
+	logger.HandleEvent(fabric.NewChannelCreatedEvent(&domain.Thread{
+		ID:        "ch-general",
+		Type:      domain.ThreadChannel,
+		Slug:      "general",
+		Title:     "General",
+		CreatedAt: now,
+		CreatedBy: "SYSTEM",
+	}))
+	logger.HandleEvent(fabric.Event{
+		Type:      fabric.EventReplyPosted,
+		Timestamp: now.Add(time.Second),
+		ChannelID: "ch-general",
+		ParentID:  "msg-missing",
+		Thread: &domain.Thread{
+			ID:        "reply-orphan",
+			Type:      domain.ThreadMessage,
+			Content:   "Reply with unresolved parent",
+			Kind:      string(domain.KindResponse),
+			CreatedAt: now.Add(time.Second),
+			CreatedBy: "worker-2",
+		},
+	})
+	require.NoError(t, logger.Close())
+
+	inst.Infrastructure = createMinimalInfrastructureWithFabric(t)
+	err = ds.restoreFabricState(inst)
+	require.NoError(t, err)
+
+	_, err = inst.Infrastructure.Core.FabricService.GetThread("reply-orphan")
+	require.NoError(t, err)
+	replies, err := inst.Infrastructure.Core.FabricService.GetReplies("msg-missing")
+	require.NoError(t, err)
+	require.Len(t, replies, 0)
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	content := string(data)
+	require.Contains(t, content, "diagnostic=fabric_restore_reply_skipped")
+	require.Contains(t, content, "reason=unresolved_parent")
 }
 
 func TestSupervisor_RestoreFabricState_NilFabricService(t *testing.T) {

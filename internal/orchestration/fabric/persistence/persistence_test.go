@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/domain"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/repository"
@@ -249,6 +250,285 @@ func TestRestoreFabricState(t *testing.T) {
 	require.Equal(t, domain.ModeAll, agentSubs[0].Mode)
 }
 
+func TestRestoreFabricState_ReplayReplyPostedRestoresReplyToDependencyFromParentID(t *testing.T) {
+	threads := repository.NewMemoryThreadRepository()
+	deps := repository.NewMemoryDependencyRepository()
+	subs := repository.NewMemorySubscriptionRepository()
+	acks := repository.NewMemoryAckRepository(deps, threads, subs)
+	participants := repository.NewMemoryParticipantRepository()
+	reactions := repository.NewInMemoryReactionRepository()
+
+	now := time.Now()
+	events := []PersistedEvent{
+		{
+			Version:   currentVersion,
+			Timestamp: now,
+			Event: fabric.Event{
+				Type:      fabric.EventChannelCreated,
+				Timestamp: now,
+				ChannelID: "ch-general",
+				Thread: &domain.Thread{
+					ID:        "ch-general",
+					Type:      domain.ThreadChannel,
+					Slug:      "general",
+					Title:     "General",
+					CreatedAt: now,
+					CreatedBy: "SYSTEM",
+				},
+			},
+		},
+		{
+			Version:   currentVersion,
+			Timestamp: now.Add(time.Second),
+			Event: fabric.Event{
+				Type:      fabric.EventMessagePosted,
+				Timestamp: now.Add(time.Second),
+				ChannelID: "ch-general",
+				Thread: &domain.Thread{
+					ID:        "msg-1",
+					Type:      domain.ThreadMessage,
+					Content:   "Root message",
+					Kind:      string(domain.KindInfo),
+					CreatedAt: now.Add(time.Second),
+					CreatedBy: "COORDINATOR",
+				},
+			},
+		},
+		{
+			Version:   currentVersion,
+			Timestamp: now.Add(2 * time.Second),
+			Event: fabric.Event{
+				Type:      fabric.EventReplyPosted,
+				Timestamp: now.Add(2 * time.Second),
+				ChannelID: "ch-general",
+				ParentID:  "msg-1",
+				Thread: &domain.Thread{
+					ID:        "reply-1",
+					Type:      domain.ThreadMessage,
+					Content:   "Reply message",
+					Kind:      string(domain.KindResponse),
+					CreatedAt: now.Add(2 * time.Second),
+					CreatedBy: "worker-1",
+				},
+			},
+		},
+	}
+
+	err := RestoreFabricState(events, threads, deps, subs, acks, participants, reactions)
+	require.NoError(t, err)
+
+	relation := domain.RelationReplyTo
+	replyDeps, err := deps.GetChildren("msg-1", &relation)
+	require.NoError(t, err)
+	require.Len(t, replyDeps, 1)
+	require.Equal(t, "reply-1", replyDeps[0].ThreadID)
+	require.Equal(t, "msg-1", replyDeps[0].DependsOnID)
+	require.Equal(t, domain.RelationReplyTo, replyDeps[0].Relation)
+}
+
+func TestRestoreFabricState_ReplayReplyPostedDuplicateEventIsIdempotent(t *testing.T) {
+	threads := repository.NewMemoryThreadRepository()
+	deps := repository.NewMemoryDependencyRepository()
+	subs := repository.NewMemorySubscriptionRepository()
+	acks := repository.NewMemoryAckRepository(deps, threads, subs)
+	participants := repository.NewMemoryParticipantRepository()
+	reactions := repository.NewInMemoryReactionRepository()
+
+	now := time.Now()
+	replyEvent := fabric.Event{
+		Type:      fabric.EventReplyPosted,
+		Timestamp: now.Add(2 * time.Second),
+		ChannelID: "ch-general",
+		ParentID:  "msg-1",
+		Thread: &domain.Thread{
+			ID:        "reply-1",
+			Type:      domain.ThreadMessage,
+			Content:   "Reply message",
+			Kind:      string(domain.KindResponse),
+			CreatedAt: now.Add(2 * time.Second),
+			CreatedBy: "worker-1",
+		},
+	}
+
+	events := []PersistedEvent{
+		{
+			Version:   currentVersion,
+			Timestamp: now,
+			Event: fabric.Event{
+				Type:      fabric.EventChannelCreated,
+				Timestamp: now,
+				ChannelID: "ch-general",
+				Thread: &domain.Thread{
+					ID:        "ch-general",
+					Type:      domain.ThreadChannel,
+					Slug:      "general",
+					Title:     "General",
+					CreatedAt: now,
+					CreatedBy: "SYSTEM",
+				},
+			},
+		},
+		{
+			Version:   currentVersion,
+			Timestamp: now.Add(time.Second),
+			Event: fabric.Event{
+				Type:      fabric.EventMessagePosted,
+				Timestamp: now.Add(time.Second),
+				ChannelID: "ch-general",
+				Thread: &domain.Thread{
+					ID:        "msg-1",
+					Type:      domain.ThreadMessage,
+					Content:   "Root message",
+					Kind:      string(domain.KindInfo),
+					CreatedAt: now.Add(time.Second),
+					CreatedBy: "COORDINATOR",
+				},
+			},
+		},
+		{
+			Version:   currentVersion,
+			Timestamp: now.Add(2 * time.Second),
+			Event:     replyEvent,
+		},
+		{
+			Version:   currentVersion,
+			Timestamp: now.Add(3 * time.Second),
+			Event:     replyEvent,
+		},
+	}
+
+	err := RestoreFabricState(events, threads, deps, subs, acks, participants, reactions)
+	require.NoError(t, err)
+
+	relation := domain.RelationReplyTo
+	replyDeps, err := deps.GetChildren("msg-1", &relation)
+	require.NoError(t, err)
+	require.Len(t, replyDeps, 1)
+
+	threadsList, err := threads.List(repository.ListOptions{Type: ptrThreadType(domain.ThreadMessage)})
+	require.NoError(t, err)
+	require.Len(t, threadsList, 2) // root message + single reply
+}
+
+func TestRestoreFabricState_ReplayReplyPostedMissingParentIDSkipsWithDiagnostic(t *testing.T) {
+	logPath, closeLogger := initTestLogger(t)
+	defer closeLogger()
+
+	threads := repository.NewMemoryThreadRepository()
+	deps := repository.NewMemoryDependencyRepository()
+	subs := repository.NewMemorySubscriptionRepository()
+	acks := repository.NewMemoryAckRepository(deps, threads, subs)
+	participants := repository.NewMemoryParticipantRepository()
+	reactions := repository.NewInMemoryReactionRepository()
+
+	now := time.Now()
+	events := []PersistedEvent{
+		{
+			Version:   currentVersion,
+			Timestamp: now,
+			Event: fabric.Event{
+				Type:      fabric.EventChannelCreated,
+				Timestamp: now,
+				ChannelID: "ch-general",
+				Thread: &domain.Thread{
+					ID:        "ch-general",
+					Type:      domain.ThreadChannel,
+					Slug:      "general",
+					Title:     "General",
+					CreatedAt: now,
+					CreatedBy: "SYSTEM",
+				},
+			},
+		},
+		{
+			Version:   currentVersion,
+			Timestamp: now.Add(time.Second),
+			Event: fabric.Event{
+				Type:      fabric.EventMessagePosted,
+				Timestamp: now.Add(time.Second),
+				ChannelID: "ch-general",
+				Thread: &domain.Thread{
+					ID:        "msg-1",
+					Type:      domain.ThreadMessage,
+					Content:   "Root message",
+					Kind:      string(domain.KindInfo),
+					CreatedAt: now.Add(time.Second),
+					CreatedBy: "COORDINATOR",
+				},
+			},
+		},
+		{
+			Version:   currentVersion,
+			Timestamp: now.Add(2 * time.Second),
+			Event: fabric.Event{
+				Type:      fabric.EventReplyPosted,
+				Timestamp: now.Add(2 * time.Second),
+				ChannelID: "ch-general",
+				Thread: &domain.Thread{
+					ID:        "reply-1",
+					Type:      domain.ThreadMessage,
+					Content:   "Reply message",
+					Kind:      string(domain.KindResponse),
+					CreatedAt: now.Add(2 * time.Second),
+					CreatedBy: "worker-1",
+				},
+			},
+		},
+	}
+
+	err := RestoreFabricState(events, threads, deps, subs, acks, participants, reactions)
+	require.NoError(t, err)
+
+	relation := domain.RelationReplyTo
+	replyDeps, err := deps.GetChildren("msg-1", &relation)
+	require.NoError(t, err)
+	require.Len(t, replyDeps, 0)
+	requireRestoreSkipDiagnostic(t, logPath, replyRestoreSkipReasonMissingParentID)
+}
+
+func TestRestoreFabricState_ReplayReplyPostedUnresolvedParentSkipsWithDiagnostic(t *testing.T) {
+	logPath, closeLogger := initTestLogger(t)
+	defer closeLogger()
+
+	threads := repository.NewMemoryThreadRepository()
+	deps := repository.NewMemoryDependencyRepository()
+	subs := repository.NewMemorySubscriptionRepository()
+	acks := repository.NewMemoryAckRepository(deps, threads, subs)
+	participants := repository.NewMemoryParticipantRepository()
+	reactions := repository.NewInMemoryReactionRepository()
+
+	now := time.Now()
+	events := []PersistedEvent{
+		{
+			Version:   currentVersion,
+			Timestamp: now,
+			Event: fabric.Event{
+				Type:      fabric.EventReplyPosted,
+				Timestamp: now,
+				ChannelID: "ch-general",
+				ParentID:  "msg-missing",
+				Thread: &domain.Thread{
+					ID:        "reply-1",
+					Type:      domain.ThreadMessage,
+					Content:   "Reply message",
+					Kind:      string(domain.KindResponse),
+					CreatedAt: now,
+					CreatedBy: "worker-1",
+				},
+			},
+		},
+	}
+
+	err := RestoreFabricState(events, threads, deps, subs, acks, participants, reactions)
+	require.NoError(t, err)
+
+	relation := domain.RelationReplyTo
+	replyDeps, err := deps.GetChildren("msg-missing", &relation)
+	require.NoError(t, err)
+	require.Len(t, replyDeps, 0)
+	requireRestoreSkipDiagnostic(t, logPath, replyRestoreSkipReasonUnresolvedParent)
+}
+
 func TestRestoreFabricState_Reactions(t *testing.T) {
 	// Create repositories
 	threads := repository.NewMemoryThreadRepository()
@@ -372,6 +652,32 @@ func TestRestoreFabricState_Reactions(t *testing.T) {
 	require.Equal(t, 2, thumbsUp.Count)
 	require.Contains(t, thumbsUp.AgentIDs, "worker-1")
 	require.Contains(t, thumbsUp.AgentIDs, "worker-2")
+}
+
+func initTestLogger(t *testing.T) (string, func()) {
+	t.Helper()
+
+	logPath := filepath.Join(t.TempDir(), "restore.log")
+	cleanup, err := log.InitWithTeaLog(logPath, "persistence-test")
+	require.NoError(t, err)
+	log.SetEnabled(true)
+
+	return logPath, cleanup
+}
+
+func requireRestoreSkipDiagnostic(t *testing.T, logPath, reason string) {
+	t.Helper()
+
+	data, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+
+	content := string(data)
+	require.Contains(t, content, "diagnostic="+replyRestoreSkippedDiagnosticKey)
+	require.Contains(t, content, "reason="+reason)
+}
+
+func ptrThreadType(tt domain.ThreadType) *domain.ThreadType {
+	return &tt
 }
 
 func TestRestoreFabricState_ReactionRemoved(t *testing.T) {

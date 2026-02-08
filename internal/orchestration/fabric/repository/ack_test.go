@@ -533,3 +533,148 @@ func TestMemoryAckRepository_GetUnacked_ModeMentionsSubscriberSkipsReplies(t *te
 	require.Equal(t, 1, unacked[channel.ID].Count, "ModeMentions subscriber should see reply that mentions them")
 	require.Contains(t, unacked[channel.ID].ThreadIDs, reply2.ID)
 }
+
+func TestMemoryAckRepository_GetChannelForReply_TraversesReplayRestoredReplyToChain(t *testing.T) {
+	ackRepo, threadRepo, depRepo, _ := setupAckTestRepos()
+
+	channel, err := threadRepo.Create(domain.Thread{
+		ID:   "ch-replay-general",
+		Type: domain.ThreadChannel,
+		Slug: "general",
+	})
+	require.NoError(t, err)
+
+	root, err := threadRepo.Create(domain.Thread{
+		ID:        "msg-root",
+		Type:      domain.ThreadMessage,
+		Content:   "Root restored message",
+		CreatedBy: "coordinator",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(root.ID, channel.ID, domain.RelationChildOf))
+	require.NoError(t, err)
+
+	replyOne, err := threadRepo.Create(domain.Thread{
+		ID:        "msg-reply-one",
+		Type:      domain.ThreadMessage,
+		Content:   "First restored reply",
+		CreatedBy: "worker-1",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(replyOne.ID, root.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	replyTwo, err := threadRepo.Create(domain.Thread{
+		ID:        "msg-reply-two",
+		Type:      domain.ThreadMessage,
+		Content:   "Second restored reply",
+		CreatedBy: "worker-2",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(replyTwo.ID, replyOne.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	resolvedChannel := ackRepo.getChannelForReply(replyTwo.ID)
+	require.Equal(t, channel.ID, resolvedChannel)
+}
+
+func TestMemoryAckRepository_GetUnacked_ReplayRestoredReplyIncludesThreadParticipants(t *testing.T) {
+	ackRepo, threadRepo, depRepo, _ := setupAckTestRepos()
+
+	channel, err := threadRepo.Create(domain.Thread{
+		ID:   "ch-replay-tasks",
+		Type: domain.ThreadChannel,
+		Slug: "tasks",
+	})
+	require.NoError(t, err)
+
+	root, err := threadRepo.Create(domain.Thread{
+		ID:           "msg-root-participants",
+		Type:         domain.ThreadMessage,
+		Content:      "Restored root with participants",
+		CreatedBy:    "coordinator",
+		Participants: []string{"coordinator", "worker-1"},
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(root.ID, channel.ID, domain.RelationChildOf))
+	require.NoError(t, err)
+
+	// Keep assertions focused on reply visibility after restore.
+	err = ackRepo.Ack("worker-1", root.ID)
+	require.NoError(t, err)
+	err = ackRepo.Ack("coordinator", root.ID)
+	require.NoError(t, err)
+
+	reply, err := threadRepo.Create(domain.Thread{
+		ID:        "msg-restored-reply",
+		Type:      domain.ThreadMessage,
+		Content:   "Reply restored from replay",
+		CreatedBy: "worker-2",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(reply.ID, root.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	unacked, err := ackRepo.GetUnacked("worker-1")
+	require.NoError(t, err)
+	require.Equal(t, 1, unacked[channel.ID].Count)
+	require.Contains(t, unacked[channel.ID].ThreadIDs, reply.ID)
+
+	unacked, err = ackRepo.GetUnacked("coordinator")
+	require.NoError(t, err)
+	require.Equal(t, 1, unacked[channel.ID].Count)
+	require.Contains(t, unacked[channel.ID].ThreadIDs, reply.ID)
+}
+
+func TestMemoryAckRepository_GetUnacked_MissingReplayReplyEdgeDoesNotCreateFalsePositives(t *testing.T) {
+	ackRepo, threadRepo, depRepo, subRepo := setupAckTestRepos()
+
+	channel, err := threadRepo.Create(domain.Thread{
+		ID:   "ch-replay-observer",
+		Type: domain.ThreadChannel,
+		Slug: "observer",
+	})
+	require.NoError(t, err)
+
+	_, err = subRepo.Subscribe(channel.ID, "observer", domain.ModeAll)
+	require.NoError(t, err)
+
+	root, err := threadRepo.Create(domain.Thread{
+		ID:        "msg-root-observer",
+		Type:      domain.ThreadMessage,
+		Content:   "Replay root",
+		CreatedBy: "coordinator",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(root.ID, channel.ID, domain.RelationChildOf))
+	require.NoError(t, err)
+
+	err = ackRepo.Ack("observer", root.ID)
+	require.NoError(t, err)
+
+	validReply, err := threadRepo.Create(domain.Thread{
+		ID:        "msg-valid-replay-reply",
+		Type:      domain.ThreadMessage,
+		Content:   "Valid restored reply",
+		CreatedBy: "worker-1",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(validReply.ID, root.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	// Simulate a restored reply node where replay skipped reply_to edge restoration.
+	missingEdgeReply, err := threadRepo.Create(domain.Thread{
+		ID:        "msg-missing-replay-edge",
+		Type:      domain.ThreadMessage,
+		Content:   "Missing reply_to edge should stay hidden",
+		CreatedBy: "worker-2",
+		Mentions:  []string{"observer"},
+	})
+	require.NoError(t, err)
+
+	unacked, err := ackRepo.GetUnacked("observer")
+	require.NoError(t, err)
+	require.Equal(t, 1, unacked[channel.ID].Count)
+	require.Contains(t, unacked[channel.ID].ThreadIDs, validReply.ID)
+	require.NotContains(t, unacked[channel.ID].ThreadIDs, missingEdgeReply.ID)
+}

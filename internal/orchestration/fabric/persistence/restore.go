@@ -7,9 +7,19 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/domain"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/repository"
+)
+
+const (
+	// replyRestoreSkippedDiagnosticKey is emitted when reply edge restoration is skipped.
+	replyRestoreSkippedDiagnosticKey = "fabric_restore_reply_skipped"
+
+	// Reply restore skip reasons. Keep these values stable for diagnostics assertions.
+	replyRestoreSkipReasonMissingParentID  = "missing_parent_id"
+	replyRestoreSkipReasonUnresolvedParent = "unresolved_parent"
 )
 
 // LoadPersistedEvents loads all persisted Fabric events from a session directory.
@@ -183,23 +193,49 @@ func replayMessagePosted(event fabric.Event, threads repository.ThreadRepository
 }
 
 // replayReplyPosted restores a reply message and its reply_to dependency.
-func replayReplyPosted(event fabric.Event, threads repository.ThreadRepository, _ repository.DependencyRepository) error {
+func replayReplyPosted(event fabric.Event, threads repository.ThreadRepository, deps repository.DependencyRepository) error {
 	if event.Thread == nil {
 		return fmt.Errorf("reply posted event has no thread")
 	}
 
 	// Create the reply thread
 	thread := *event.Thread
-	if _, err := threads.Create(thread); err != nil {
-		return nil // May already exist
+	replyID := thread.ID
+	if created, err := threads.Create(thread); err != nil {
+		// Keep replay idempotent by allowing duplicate creates.
+		// Dependency replay still runs below so repeated restore can repair missing edges.
+	} else {
+		replyID = created.ID
 	}
 
-	// Note: The reply_to dependency should be inferred from Thread.Meta["reply_to"]
-	// or stored in the event. For now, we rely on the ChannelID field being
-	// repurposed for the parent message ID in reply events.
-	// This matches the behavior in service.go where Reply uses findChannelForMessage.
+	// ParentID is the canonical and only source for reply edge restoration.
+	// If it's missing, fail closed: skip edge creation and emit a structured warning.
+	if event.ParentID == "" {
+		logReplyRestoreSkipped(replyRestoreSkipReasonMissingParentID, replyID, event.ParentID)
+		return nil
+	}
+
+	// Skip with diagnostics if the parent message cannot be resolved at replay time.
+	if _, err := threads.Get(event.ParentID); err != nil {
+		logReplyRestoreSkipped(replyRestoreSkipReasonUnresolvedParent, replyID, event.ParentID)
+		return nil
+	}
+
+	dep := domain.NewDependency(replyID, event.ParentID, domain.RelationReplyTo)
+	_ = deps.Add(dep)
 
 	return nil
+}
+
+func logReplyRestoreSkipped(reason, replyID, parentID string) {
+	log.Warn(
+		log.CatOrch,
+		"Skipped reply edge restoration during Fabric replay",
+		"diagnostic", replyRestoreSkippedDiagnosticKey,
+		"reason", reason,
+		"reply_id", replyID,
+		"parent_id", parentID,
+	)
 }
 
 // replayArtifactAdded restores an artifact and its references dependency.

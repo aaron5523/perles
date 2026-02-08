@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/domain"
+	fabricpersist "github.com/zjrosen/perles/internal/orchestration/fabric/persistence"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/repository"
 )
 
@@ -27,6 +30,55 @@ func newTestHandlers(t *testing.T) (*Handlers, *fabric.Service) {
 
 	handlers := NewHandlers(svc, "COORDINATOR")
 	return handlers, svc
+}
+
+func newReplaySeedService(t *testing.T, sessionDir string) (*fabric.Service, *fabricpersist.EventLogger) {
+	t.Helper()
+
+	logger, err := fabricpersist.NewEventLogger(sessionDir)
+	require.NoError(t, err)
+
+	threadRepo := repository.NewMemoryThreadRepository()
+	depRepo := repository.NewMemoryDependencyRepository()
+	subRepo := repository.NewMemorySubscriptionRepository()
+	ackRepo := repository.NewMemoryAckRepository(depRepo, threadRepo, subRepo)
+	participantRepo := repository.NewMemoryParticipantRepository()
+
+	svc := fabric.NewService(threadRepo, depRepo, subRepo, ackRepo, participantRepo)
+	svc.SetEventHandler(logger.HandleEvent)
+	require.NoError(t, svc.InitSession("COORDINATOR"))
+
+	return svc, logger
+}
+
+func newRestoredHandlersFromSession(t *testing.T, sessionDir string) (*Handlers, *fabric.Service) {
+	t.Helper()
+
+	threadRepo := repository.NewMemoryThreadRepository()
+	depRepo := repository.NewMemoryDependencyRepository()
+	subRepo := repository.NewMemorySubscriptionRepository()
+	ackRepo := repository.NewMemoryAckRepository(depRepo, threadRepo, subRepo)
+	participantRepo := repository.NewMemoryParticipantRepository()
+	reactionRepo := repository.NewInMemoryReactionRepository()
+
+	_, err := fabricpersist.RestoreFabricService(sessionDir, threadRepo, depRepo, subRepo, ackRepo, participantRepo, reactionRepo)
+	require.NoError(t, err)
+
+	svc := fabric.NewService(threadRepo, depRepo, subRepo, ackRepo, participantRepo)
+	require.NoError(t, svc.RestoreChannelIDs())
+
+	return NewHandlers(svc, "COORDINATOR"), svc
+}
+
+func decodeStructuredContent[T any](t *testing.T, result *ToolCallResult) T {
+	t.Helper()
+
+	var response T
+	responseBytes, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(responseBytes, &response))
+
+	return response
 }
 
 func TestHandlers_Inbox(t *testing.T) {
@@ -407,4 +459,189 @@ func TestHandlers_ReadThread(t *testing.T) {
 	require.Len(t, response.Participants, 2)
 	require.Contains(t, response.Participants, "COORDINATOR")
 	require.Contains(t, response.Participants, "WORKER.1")
+}
+
+func TestHandlers_ReadThread_RestoredRepliesAfterReplay(t *testing.T) {
+	sessionDir := t.TempDir()
+	seedSvc, logger := newReplaySeedService(t, sessionDir)
+
+	root, err := seedSvc.SendMessage(fabric.SendMessageInput{
+		ChannelSlug: domain.SlugGeneral,
+		Content:     "Root message restored from replay",
+		CreatedBy:   "COORDINATOR",
+	})
+	require.NoError(t, err)
+
+	replyOne, err := seedSvc.Reply(fabric.ReplyInput{
+		MessageID: root.ID,
+		Content:   "First restored reply",
+		CreatedBy: "WORKER.1",
+	})
+	require.NoError(t, err)
+
+	replyTwo, err := seedSvc.Reply(fabric.ReplyInput{
+		MessageID: root.ID,
+		Content:   "Second restored reply",
+		CreatedBy: "WORKER.2",
+	})
+	require.NoError(t, err)
+	require.NoError(t, logger.Close())
+
+	h, _ := newRestoredHandlersFromSession(t, sessionDir)
+
+	argsJSON, err := json.Marshal(readThreadArgs{MessageID: root.ID})
+	require.NoError(t, err)
+
+	result, err := h.HandleReadThread(context.Background(), argsJSON)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	response := decodeStructuredContent[ReadThreadResponse](t, result)
+	require.Equal(t, root.ID, response.Message.ID)
+	require.Len(t, response.Replies, 2)
+	require.Equal(t, []string{replyOne.ID, replyTwo.ID}, []string{response.Replies[0].ID, response.Replies[1].ID})
+	require.Equal(t, []string{"COORDINATOR", "WORKER.1", "WORKER.2"}, response.Participants)
+}
+
+func TestHandlers_History_RestoredRepliesVisibleAndOrderedAfterReplay(t *testing.T) {
+	sessionDir := t.TempDir()
+	seedSvc, logger := newReplaySeedService(t, sessionDir)
+
+	firstRoot, err := seedSvc.SendMessage(fabric.SendMessageInput{
+		ChannelSlug: domain.SlugGeneral,
+		Content:     "First root message",
+		CreatedBy:   "COORDINATOR",
+	})
+	require.NoError(t, err)
+
+	secondRoot, err := seedSvc.SendMessage(fabric.SendMessageInput{
+		ChannelSlug: domain.SlugGeneral,
+		Content:     "Second root message",
+		CreatedBy:   "COORDINATOR",
+	})
+	require.NoError(t, err)
+
+	_, err = seedSvc.Reply(fabric.ReplyInput{
+		MessageID: firstRoot.ID,
+		Content:   "Reply attached to first root",
+		CreatedBy: "WORKER.1",
+	})
+	require.NoError(t, err)
+
+	_, err = seedSvc.Reply(fabric.ReplyInput{
+		MessageID: secondRoot.ID,
+		Content:   "Reply one on second root",
+		CreatedBy: "WORKER.2",
+	})
+	require.NoError(t, err)
+
+	_, err = seedSvc.Reply(fabric.ReplyInput{
+		MessageID: secondRoot.ID,
+		Content:   "Reply two on second root",
+		CreatedBy: "WORKER.3",
+	})
+	require.NoError(t, err)
+	require.NoError(t, logger.Close())
+
+	h, _ := newRestoredHandlersFromSession(t, sessionDir)
+
+	argsJSON, err := json.Marshal(historyArgs{
+		Channel: domain.SlugGeneral,
+		Limit:   10,
+	})
+	require.NoError(t, err)
+
+	result, err := h.HandleHistory(context.Background(), argsJSON)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	response := decodeStructuredContent[HistoryResponse](t, result)
+	require.Equal(t, domain.SlugGeneral, response.ChannelSlug)
+	require.Equal(t, 2, response.TotalCount)
+	require.Len(t, response.Messages, 2, "replies should remain thread-only and not appear as channel history rows")
+	require.Equal(t, firstRoot.ID, response.Messages[0].ID)
+	require.Equal(t, secondRoot.ID, response.Messages[1].ID)
+	require.Equal(t, 1, response.Messages[0].ReplyCount)
+	require.Equal(t, 2, response.Messages[1].ReplyCount)
+}
+
+func TestHandlers_RestoredMalformedOrSkippedRepliesDoNotCrash(t *testing.T) {
+	sessionDir := t.TempDir()
+	seedSvc, logger := newReplaySeedService(t, sessionDir)
+
+	root, err := seedSvc.SendMessage(fabric.SendMessageInput{
+		ChannelSlug: domain.SlugGeneral,
+		Content:     "Root for malformed replay test",
+		CreatedBy:   "COORDINATOR",
+	})
+	require.NoError(t, err)
+
+	validReply, err := seedSvc.Reply(fabric.ReplyInput{
+		MessageID: root.ID,
+		Content:   "Valid restored reply",
+		CreatedBy: "WORKER.1",
+	})
+	require.NoError(t, err)
+
+	generalChannelID := seedSvc.GetChannelID(domain.SlugGeneral)
+	now := time.Now()
+
+	logger.HandleEvent(fabric.Event{
+		Type:      fabric.EventReplyPosted,
+		Timestamp: now,
+		ChannelID: generalChannelID,
+		Thread: &domain.Thread{
+			ID:        "reply-missing-parent-id",
+			Type:      domain.ThreadMessage,
+			Content:   "Reply missing parent id",
+			Kind:      string(domain.KindResponse),
+			CreatedAt: now,
+			CreatedBy: "WORKER.2",
+		},
+	})
+
+	logger.HandleEvent(fabric.Event{
+		Type:      fabric.EventReplyPosted,
+		Timestamp: now.Add(time.Second),
+		ChannelID: generalChannelID,
+		ParentID:  "msg-missing-parent",
+		Thread: &domain.Thread{
+			ID:        "reply-unresolved-parent",
+			Type:      domain.ThreadMessage,
+			Content:   "Reply with unresolved parent",
+			Kind:      string(domain.KindResponse),
+			CreatedAt: now.Add(time.Second),
+			CreatedBy: "WORKER.3",
+		},
+	})
+
+	require.NoError(t, logger.Close())
+
+	eventsFile, err := os.OpenFile(filepath.Join(sessionDir, fabricpersist.FabricEventsFile), os.O_APPEND|os.O_WRONLY, 0644)
+	require.NoError(t, err)
+	_, err = eventsFile.WriteString("{this is malformed json\n")
+	require.NoError(t, err)
+	require.NoError(t, eventsFile.Close())
+
+	h, _ := newRestoredHandlersFromSession(t, sessionDir)
+
+	readArgsJSON, err := json.Marshal(readThreadArgs{MessageID: root.ID})
+	require.NoError(t, err)
+	readResult, err := h.HandleReadThread(context.Background(), readArgsJSON)
+	require.NoError(t, err)
+	readResponse := decodeStructuredContent[ReadThreadResponse](t, readResult)
+	require.Len(t, readResponse.Replies, 1)
+	require.Equal(t, validReply.ID, readResponse.Replies[0].ID)
+
+	historyArgsJSON, err := json.Marshal(historyArgs{
+		Channel: domain.SlugGeneral,
+		Limit:   10,
+	})
+	require.NoError(t, err)
+	historyResult, err := h.HandleHistory(context.Background(), historyArgsJSON)
+	require.NoError(t, err)
+	historyResponse := decodeStructuredContent[HistoryResponse](t, historyResult)
+	require.Len(t, historyResponse.Messages, 1)
+	require.Equal(t, root.ID, historyResponse.Messages[0].ID)
+	require.Equal(t, 1, historyResponse.Messages[0].ReplyCount)
 }
