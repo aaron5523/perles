@@ -307,9 +307,16 @@ const defaultSystemPrompt = "v1-epic-instructions.md"
 
 // buildRegistrationFromDefWithSource converts a WorkflowDef into a registry.Registration with a specific source.
 func buildRegistrationFromDefWithSource(def WorkflowDef, source registry.Source) (*registry.Registration, error) {
-	// Build the chain from node definitions (skip for epic-driven workflows which have no nodes)
+	// Build the chain from node definitions.
+	// Skip for workflows with no nodes:
+	//   - Epic-driven workflows (existing epic, no pre-created tasks)
+	//   - Collaborative workflows (creates epic but tasks emerge from discussion)
+	// Non-epic-driven zero-node workflows must have a system_prompt to be valid.
 	var chain *registry.Chain
-	if !isEpicDrivenWorkflow(&def) {
+	if len(def.Nodes) == 0 && !isEpicDrivenWorkflow(&def) && def.SystemPrompt == "" {
+		return nil, fmt.Errorf("workflow must have at least one node, or a system_prompt for node-less orchestration")
+	}
+	if len(def.Nodes) > 0 {
 		chainBuilder := registry.NewChain()
 		for i, node := range def.Nodes {
 			opts, err := buildNodeOptions(node)
@@ -391,10 +398,16 @@ func buildArguments(defs []ArgumentDef) ([]*registry.Argument, error) {
 }
 
 // isOrchestrationWorkflow checks if the workflow definition is an orchestration workflow.
-// Orchestration workflows have at least one node with an assignee field, OR are epic-driven.
+// Orchestration workflows have at least one node with an assignee field, OR are epic-driven,
+// OR have a system_prompt with no nodes (collaborative workflows that create an epic without pre-defined tasks).
 func isOrchestrationWorkflow(def *WorkflowDef) bool {
 	// Epic-driven workflows are orchestration workflows
 	if isEpicDrivenWorkflow(def) {
+		return true
+	}
+	// Zero-node workflows with a system_prompt are orchestration workflows
+	// (e.g., collaborative planning that creates an epic but tasks emerge from discussion)
+	if len(def.Nodes) == 0 && def.SystemPrompt != "" {
 		return true
 	}
 	// Standard orchestration: at least one node with assignee

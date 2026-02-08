@@ -102,10 +102,22 @@ func (c *WorkflowCreator) CreateWithArgs(feature, workflowKey string, args map[s
 		return nil, fmt.Errorf("create epic: %w", err)
 	}
 
-	// 4. Create tasks and build ID mapping
+	// 4. Create tasks and build ID mapping (skip if no DAG, e.g., collaborative workflows)
 	dag := reg.DAG()
 	if dag == nil {
-		return nil, fmt.Errorf("workflow %s has no DAG", workflowKey)
+		// No DAG means no pre-created tasks (tasks emerge during the workflow)
+		return &WorkflowResultDTO{
+			Epic: EpicDTO{
+				ID:      epicResult.ID,
+				Title:   epicTitle,
+				Feature: feature,
+			},
+			Workflow: WorkflowInfoDTO{
+				Key:  reg.Key(),
+				Name: reg.Name(),
+			},
+			Tasks: nil,
+		}, nil
 	}
 
 	keyToID := make(map[string]string)

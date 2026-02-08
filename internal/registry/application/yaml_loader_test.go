@@ -1400,3 +1400,354 @@ registry:
 	// No arguments is valid
 	require.Nil(t, regs[0].Arguments())
 }
+
+// --- Tests for collaborative workflow pattern (zero nodes + system_prompt) ---
+
+func TestIsEpicDrivenWorkflow(t *testing.T) {
+	tests := []struct {
+		name string
+		def  WorkflowDef
+		want bool
+	}{
+		{
+			name: "classic epic-driven: single epic_id arg, no nodes",
+			def: WorkflowDef{
+				Arguments: []ArgumentDef{
+					{Key: "epic_id", Type: "text"},
+				},
+				Nodes: nil,
+			},
+			want: true,
+		},
+		{
+			name: "epic_id arg with empty nodes slice",
+			def: WorkflowDef{
+				Arguments: []ArgumentDef{
+					{Key: "epic_id", Type: "text"},
+				},
+				Nodes: []NodeDef{},
+			},
+			want: true,
+		},
+		{
+			name: "not epic-driven: epic_id but has nodes",
+			def: WorkflowDef{
+				Arguments: []ArgumentDef{
+					{Key: "epic_id", Type: "text"},
+				},
+				Nodes: []NodeDef{
+					{Key: "step1", Name: "Step 1", Template: "step1.md"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "not epic-driven: no arguments",
+			def: WorkflowDef{
+				Arguments: nil,
+				Nodes:     nil,
+			},
+			want: false,
+		},
+		{
+			name: "not epic-driven: different argument key",
+			def: WorkflowDef{
+				Arguments: []ArgumentDef{
+					{Key: "goal", Type: "textarea"},
+				},
+				Nodes: nil,
+			},
+			want: false,
+		},
+		{
+			name: "not epic-driven: multiple arguments including epic_id",
+			def: WorkflowDef{
+				Arguments: []ArgumentDef{
+					{Key: "epic_id", Type: "text"},
+					{Key: "extra", Type: "text"},
+				},
+				Nodes: nil,
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isEpicDrivenWorkflow(&tt.def)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIsOrchestrationWorkflow_ZeroNodesWithSystemPrompt(t *testing.T) {
+	tests := []struct {
+		name string
+		def  WorkflowDef
+		want bool
+	}{
+		{
+			name: "zero nodes with system_prompt is orchestration",
+			def: WorkflowDef{
+				SystemPrompt: "instructions.md",
+				Nodes:        nil,
+				Arguments: []ArgumentDef{
+					{Key: "goal", Type: "textarea"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "zero nodes with system_prompt and empty nodes slice",
+			def: WorkflowDef{
+				SystemPrompt: "instructions.md",
+				Nodes:        []NodeDef{},
+				Arguments: []ArgumentDef{
+					{Key: "goal", Type: "textarea"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "zero nodes without system_prompt and not epic-driven is NOT orchestration",
+			def: WorkflowDef{
+				SystemPrompt: "",
+				Nodes:        nil,
+				Arguments: []ArgumentDef{
+					{Key: "goal", Type: "textarea"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "zero nodes with system_prompt and no arguments",
+			def: WorkflowDef{
+				SystemPrompt: "instructions.md",
+				Nodes:        nil,
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isOrchestrationWorkflow(&tt.def)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBuildRegistrationFromDefWithSource_CollaborativeWorkflow(t *testing.T) {
+	// Collaborative pattern: zero nodes + system_prompt + epic_template
+	def := WorkflowDef{
+		Namespace:    "workflow",
+		Key:          "collaborative-planning",
+		Version:      "v1",
+		Name:         "Collaborative Planning",
+		Description:  "Multi-agent planning session",
+		EpicTemplate: "workflows/test/epic.md",
+		SystemPrompt: "workflows/test/instructions.md",
+		Labels:       []string{"category:planning"},
+		Arguments: []ArgumentDef{
+			{Key: "goal", Label: "Goal", Description: "Planning goal", Type: "textarea", Required: true},
+		},
+	}
+
+	reg, err := buildRegistrationFromDefWithSource(def, registry.SourceBuiltIn)
+	require.NoError(t, err, "collaborative workflow should build successfully")
+
+	// Verify metadata
+	require.Equal(t, "workflow", reg.Namespace())
+	require.Equal(t, "collaborative-planning", reg.Key())
+	require.Equal(t, "v1", reg.Version())
+	require.Equal(t, "Collaborative Planning", reg.Name())
+	require.Equal(t, "Multi-agent planning session", reg.Description())
+
+	// Verify templates
+	require.Equal(t, "workflows/test/epic.md", reg.EpicTemplate())
+	require.Equal(t, "workflows/test/instructions.md", reg.SystemPrompt())
+
+	// Verify labels
+	require.Equal(t, []string{"category:planning"}, reg.Labels())
+
+	// Verify arguments
+	args := reg.Arguments()
+	require.Len(t, args, 1)
+	require.Equal(t, "goal", args[0].Key())
+	require.Equal(t, registry.ArgumentTypeTextarea, args[0].Type())
+	require.True(t, args[0].Required())
+
+	// Critical: zero-node workflow must have nil DAG
+	require.Nil(t, reg.DAG(), "collaborative workflow should have nil DAG (no pre-created tasks)")
+}
+
+func TestBuildRegistrationFromDefWithSource_ZeroNodesNoSystemPromptNotEpicDriven(t *testing.T) {
+	// Zero nodes, no system_prompt, not epic-driven = error
+	def := WorkflowDef{
+		Namespace:   "workflow",
+		Key:         "invalid-empty",
+		Version:     "v1",
+		Name:        "Invalid Empty",
+		Description: "",
+		Arguments: []ArgumentDef{
+			{Key: "goal", Type: "textarea"},
+		},
+	}
+
+	_, err := buildRegistrationFromDefWithSource(def, registry.SourceBuiltIn)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "at least one node")
+	require.Contains(t, err.Error(), "system_prompt")
+}
+
+func TestBuildRegistrationFromDefWithSource_EpicDrivenNoSystemPrompt(t *testing.T) {
+	// Epic-driven workflows are allowed without system_prompt (they get default upstream)
+	def := WorkflowDef{
+		Namespace:   "workflow",
+		Key:         "epic-driven",
+		Version:     "v1",
+		Name:        "Epic Driven",
+		Description: "",
+		Arguments: []ArgumentDef{
+			{Key: "epic_id", Label: "Epic ID", Description: "Existing epic", Type: "text"},
+		},
+	}
+
+	reg, err := buildRegistrationFromDefWithSource(def, registry.SourceBuiltIn)
+	require.NoError(t, err, "epic-driven workflow should build without system_prompt")
+	require.Nil(t, reg.DAG(), "epic-driven workflow should have nil DAG")
+}
+
+func TestLoadRegistryFromYAML_CollaborativeWorkflow(t *testing.T) {
+	yamlContent := `
+registry:
+  - namespace: "workflow"
+    key: "collab-planning"
+    version: "v1"
+    name: "Collaborative Planning"
+    description: "Multi-agent planning via Fabric channels"
+    epic_template: "epic.md"
+    system_prompt: "instructions.md"
+    labels:
+      - "category:planning"
+    arguments:
+      - key: "goal"
+        label: "Planning Goal"
+        description: "What to plan"
+        type: "textarea"
+        required: true
+`
+	fs := fstest.MapFS{
+		"workflows/test/template.yaml":   {Data: []byte(yamlContent)},
+		"workflows/test/epic.md":         {Data: []byte("# Epic: {{.Args.goal}}")},
+		"workflows/test/instructions.md": {Data: []byte("# Coordinator instructions")},
+	}
+
+	regs, err := LoadRegistryFromYAML(fs)
+	require.NoError(t, err, "collaborative workflow should load successfully")
+	require.Len(t, regs, 1)
+
+	reg := regs[0]
+	require.Equal(t, "collab-planning", reg.Key())
+	require.Equal(t, "Collaborative Planning", reg.Name())
+	require.Equal(t, "workflows/test/epic.md", reg.EpicTemplate())
+	require.Equal(t, "workflows/test/instructions.md", reg.SystemPrompt())
+	require.Nil(t, reg.DAG(), "collaborative workflow should have nil DAG")
+	require.Equal(t, []string{"category:planning"}, reg.Labels())
+
+	// Verify arguments loaded
+	args := reg.Arguments()
+	require.Len(t, args, 1)
+	require.Equal(t, "goal", args[0].Key())
+	require.Equal(t, registry.ArgumentTypeTextarea, args[0].Type())
+	require.True(t, args[0].Required())
+
+	// Verify source tagging
+	require.Equal(t, registry.SourceBuiltIn, reg.Source())
+}
+
+func TestLoadRegistryFromYAML_CollaborativeWorkflow_DefaultSystemPrompt(t *testing.T) {
+	// A zero-node workflow with system_prompt omitted but is recognized as orchestration
+	// because it has system_prompt content set upstream. However, since it's not epic-driven
+	// and has no system_prompt, it must error per the validation in buildRegistrationFromDefWithSource.
+	// This test verifies that zero-node workflows without system_prompt and not epic-driven DO fail.
+	yamlContent := `
+registry:
+  - namespace: "workflow"
+    key: "zero-node-no-prompt"
+    version: "v1"
+    name: "Zero Node No Prompt"
+    description: ""
+    epic_template: "epic.md"
+    arguments:
+      - key: "goal"
+        label: "Goal"
+        description: "The goal"
+        type: "textarea"
+        required: true
+`
+	fs := fstest.MapFS{
+		"workflows/test/template.yaml": {Data: []byte(yamlContent)},
+		"workflows/test/epic.md":       {Data: []byte("# Epic")},
+	}
+
+	_, err := LoadRegistryFromYAML(fs)
+	require.Error(t, err, "zero-node workflow without system_prompt should fail")
+	require.Contains(t, err.Error(), "at least one node")
+}
+
+func TestLoadRegistryFromYAML_CollaborativeWorkflow_MissingSystemPromptFile(t *testing.T) {
+	// system_prompt is specified but the file doesn't exist
+	yamlContent := `
+registry:
+  - namespace: "workflow"
+    key: "missing-prompt-file"
+    version: "v1"
+    name: "Missing Prompt File"
+    description: ""
+    epic_template: "epic.md"
+    system_prompt: "nonexistent.md"
+    arguments:
+      - key: "goal"
+        label: "Goal"
+        description: ""
+        type: "textarea"
+        required: true
+`
+	fs := fstest.MapFS{
+		"workflows/test/template.yaml": {Data: []byte(yamlContent)},
+		"workflows/test/epic.md":       {Data: []byte("# Epic")},
+	}
+
+	_, err := LoadRegistryFromYAML(fs)
+	require.Error(t, err, "missing system_prompt file should fail")
+	require.Contains(t, err.Error(), "not found")
+}
+
+func TestLoadRegistryFromYAML_CollaborativeWorkflow_MissingEpicTemplateFile(t *testing.T) {
+	// epic_template is specified but the file doesn't exist
+	yamlContent := `
+registry:
+  - namespace: "workflow"
+    key: "missing-epic-file"
+    version: "v1"
+    name: "Missing Epic File"
+    description: ""
+    epic_template: "nonexistent-epic.md"
+    system_prompt: "instructions.md"
+    arguments:
+      - key: "goal"
+        label: "Goal"
+        description: ""
+        type: "textarea"
+        required: true
+`
+	fs := fstest.MapFS{
+		"workflows/test/template.yaml":   {Data: []byte(yamlContent)},
+		"workflows/test/instructions.md": {Data: []byte("# Instructions")},
+	}
+
+	_, err := LoadRegistryFromYAML(fs)
+	require.Error(t, err, "missing epic_template file should fail")
+	require.Contains(t, err.Error(), "not found")
+}

@@ -579,16 +579,6 @@ func (m Model) renderEpicSection(width, height int) string {
 		return emptyStyle.Render("No tasks in epic")
 	}
 
-	// Check if tree has only root with no children
-	root := m.epicTree.Root()
-	if len(root.Children) == 0 {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(colorDimmed).
-			Italic(true).
-			PaddingLeft(1)
-		return emptyStyle.Render("Epic has no child tasks yet")
-	}
-
 	// Calculate tree/details layout
 	layout := calculateEpicTreeLayout(width)
 
