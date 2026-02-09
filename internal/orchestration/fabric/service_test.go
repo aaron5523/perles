@@ -211,13 +211,15 @@ func TestService_ListMessages(t *testing.T) {
 	err := svc.InitSession("system")
 	require.NoError(t, err)
 
+	sent := make([]string, 0, 5)
 	for i := 0; i < 5; i++ {
-		_, err := svc.SendMessage(SendMessageInput{
+		msg, err := svc.SendMessage(SendMessageInput{
 			ChannelSlug: domain.SlugTasks,
 			Content:     "Message",
 			CreatedBy:   "COORDINATOR",
 		})
 		require.NoError(t, err)
+		sent = append(sent, msg.ID)
 	}
 
 	messages, err := svc.ListMessages(domain.SlugTasks, 0)
@@ -228,6 +230,9 @@ func TestService_ListMessages(t *testing.T) {
 	limited, err := svc.ListMessages(domain.SlugTasks, 3)
 	require.NoError(t, err)
 	require.Len(t, limited, 3)
+	require.Equal(t, sent[2], limited[0].ID)
+	require.Equal(t, sent[3], limited[1].ID)
+	require.Equal(t, sent[4], limited[2].ID)
 }
 
 func TestService_AckAndUnacked(t *testing.T) {

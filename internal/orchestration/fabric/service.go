@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -685,17 +686,14 @@ func (s *Service) ListMessages(channelSlug string, limit int) ([]domain.Thread, 
 		}
 	}
 
-	// Sort by Seq
-	for i := 0; i < len(messages); i++ {
-		for j := i + 1; j < len(messages); j++ {
-			if messages[i].Seq > messages[j].Seq {
-				messages[i], messages[j] = messages[j], messages[i]
-			}
-		}
-	}
+	// Keep chronological ordering for callers.
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Seq < messages[j].Seq
+	})
 
 	if limit > 0 && len(messages) > limit {
-		messages = messages[:limit]
+		// Return the most recent messages while preserving chronological order.
+		messages = messages[len(messages)-limit:]
 	}
 
 	return messages, nil
