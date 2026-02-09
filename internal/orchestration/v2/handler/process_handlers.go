@@ -777,13 +777,30 @@ func (h *ProcessTurnCompleteHandler) Handle(ctx context.Context, cmd command.Com
 			WithStatus(events.ProcessStatusReady).
 			WithError(evErr)
 
-		result := &ProcessTurnCompleteResult{
-			ProcessID: proc.ID,
-			NewStatus: repository.StatusFailed,
-			WasNoOp:   false,
+		// Check for queued messages that accumulated while the process was Working.
+		// Without this, messages queued during the (now-failed) turn are orphaned:
+		// the failed turn never drains the queue, and no DeliverProcessQueued follow-up
+		// is created, so the messages sit in the queue indefinitely. When recovery
+		// triggers a new send_to_process, it only delivers one new message per cycle
+		// while the backlog never shrinks.
+		var followUps []command.Command
+		queue := h.queueRepo.GetOrCreate(proc.ID)
+		if !queue.IsEmpty() {
+			deliverCmd := command.NewDeliverProcessQueuedCommand(command.SourceInternal, proc.ID)
+			if turnCmd.TraceID() != "" {
+				deliverCmd.SetTraceID(turnCmd.TraceID())
+			}
+			followUps = append(followUps, deliverCmd)
 		}
 
-		return SuccessWithEvents(result, errorEvent), nil
+		result := &ProcessTurnCompleteResult{
+			ProcessID:      proc.ID,
+			NewStatus:      repository.StatusFailed,
+			QueuedDelivery: len(followUps) > 0,
+			WasNoOp:        false,
+		}
+
+		return SuccessWithEventsAndFollowUp(result, []any{errorEvent}, followUps), nil
 	}
 	// ===========================================================================
 	// End of failed turn handling

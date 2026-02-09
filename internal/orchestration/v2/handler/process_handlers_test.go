@@ -1473,6 +1473,74 @@ func TestProcessTurnCompleteHandler_FailedTurns_SkipEnforcement(t *testing.T) {
 	assert.Equal(t, repository.StatusFailed, turnResult.NewStatus)
 }
 
+func TestProcessTurnCompleteHandler_FailedTurn_DrainsQueue(t *testing.T) {
+	// Regression test: when a turn fails after first successful turn, any messages
+	// that accumulated in the queue while the process was Working must be drained
+	// via a DeliverProcessQueuedCommand follow-up. Without this, queued messages
+	// are orphaned and never delivered.
+	processRepo, queueRepo := setupProcessRepos()
+
+	worker := &repository.Process{
+		ID:               "worker-1",
+		Role:             repository.RoleWorker,
+		Status:           repository.StatusWorking,
+		HasCompletedTurn: true,
+	}
+	processRepo.AddProcess(worker)
+
+	// Simulate messages that arrived while the process was Working
+	queue := queueRepo.GetOrCreate("worker-1")
+	require.NoError(t, queue.Enqueue("message-1", repository.SenderCoordinator))
+	require.NoError(t, queue.Enqueue("message-2", repository.SenderSystem))
+	assert.Equal(t, 2, queue.Size())
+
+	h := handler.NewProcessTurnCompleteHandler(processRepo, queueRepo)
+
+	// Turn failed (mid-session)
+	cmd := command.NewProcessTurnCompleteCommand("worker-1", false, nil, nil)
+	result, err := h.Handle(context.Background(), cmd)
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+
+	turnResult := result.Data.(*handler.ProcessTurnCompleteResult)
+	assert.Equal(t, repository.StatusFailed, turnResult.NewStatus)
+	assert.True(t, turnResult.QueuedDelivery, "failed turn with non-empty queue must create DeliverProcessQueued follow-up")
+
+	// Verify a DeliverProcessQueuedCommand follow-up was created
+	require.Len(t, result.FollowUp, 1)
+	deliverCmd, ok := result.FollowUp[0].(*command.DeliverProcessQueuedCommand)
+	require.True(t, ok, "follow-up must be DeliverProcessQueuedCommand")
+	assert.Equal(t, "worker-1", deliverCmd.ProcessID)
+
+	// Queue should still have 2 messages (not drained yet, just scheduled for delivery)
+	assert.Equal(t, 2, queue.Size())
+}
+
+func TestProcessTurnCompleteHandler_FailedTurn_EmptyQueue_NoFollowUp(t *testing.T) {
+	// When a turn fails but the queue is empty, no follow-up should be created.
+	processRepo, queueRepo := setupProcessRepos()
+
+	worker := &repository.Process{
+		ID:               "worker-1",
+		Role:             repository.RoleWorker,
+		Status:           repository.StatusWorking,
+		HasCompletedTurn: true,
+	}
+	processRepo.AddProcess(worker)
+
+	h := handler.NewProcessTurnCompleteHandler(processRepo, queueRepo)
+
+	cmd := command.NewProcessTurnCompleteCommand("worker-1", false, nil, nil)
+	result, err := h.Handle(context.Background(), cmd)
+
+	require.NoError(t, err)
+	turnResult := result.Data.(*handler.ProcessTurnCompleteResult)
+	assert.Equal(t, repository.StatusFailed, turnResult.NewStatus)
+	assert.False(t, turnResult.QueuedDelivery, "empty queue should not trigger delivery")
+	assert.Empty(t, result.FollowUp, "no follow-ups for empty queue")
+}
+
 func TestProcessTurnCompleteHandler_StartupTurns_SkipEnforcement(t *testing.T) {
 	processRepo, queueRepo := setupProcessRepos()
 	enforcer := handler.NewTurnCompletionTracker()
