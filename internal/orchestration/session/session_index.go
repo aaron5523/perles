@@ -154,18 +154,18 @@ func SaveApplicationIndex(path string, index *ApplicationSessionIndex) error {
 	_, writeErr := tmpFile.Write(data)
 	closeErr := tmpFile.Close()
 	if writeErr != nil {
-		_ = os.Remove(tmpPath) // best effort cleanup
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp, not user input
 		return fmt.Errorf("writing temporary application session index: %w", writeErr)
 	}
 	if closeErr != nil {
-		_ = os.Remove(tmpPath) // best effort cleanup
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp, not user input
 		return fmt.Errorf("closing temporary application session index: %w", closeErr)
 	}
 
 	// Atomic rename to final path
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // tmpPath is from os.CreateTemp, path is app-controlled
 		// Clean up temp file on rename failure
-		_ = os.Remove(tmpPath) // best effort cleanup
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp
 		return fmt.Errorf("renaming application session index: %w", err)
 	}
 
@@ -194,18 +194,18 @@ func SaveSessionIndex(path string, index *SessionIndex) error {
 	_, writeErr := tmpFile.Write(data)
 	closeErr := tmpFile.Close()
 	if writeErr != nil {
-		_ = os.Remove(tmpPath) // best effort cleanup
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp
 		return fmt.Errorf("writing temporary session index: %w", writeErr)
 	}
 	if closeErr != nil {
-		_ = os.Remove(tmpPath) // best effort cleanup
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp
 		return fmt.Errorf("closing temporary session index: %w", closeErr)
 	}
 
 	// Atomic rename to final path
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // tmpPath is from os.CreateTemp, path is app-controlled
 		// Clean up temp file on rename failure
-		_ = os.Remove(tmpPath) // best effort cleanup
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp
 		return fmt.Errorf("renaming session index: %w", err)
 	}
 

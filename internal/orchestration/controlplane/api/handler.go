@@ -587,7 +587,7 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request, events <-
 				continue
 			}
 
-			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data) //nolint:gosec // SSE stream; data is JSON-marshalled
 			flusher.Flush()
 		}
 	}

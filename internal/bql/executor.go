@@ -171,11 +171,11 @@ func (e *Executor) executeBaseQuery(query *Query) ([]beads.Issue, error) {
 	`
 
 	if whereClause != "" {
-		sqlQuery += " AND " + whereClause
+		sqlQuery += " AND " + whereClause //nolint:gosec // whereClause is built from validated BQL fields, not raw user input
 	}
 
 	if orderBy != "" {
-		sqlQuery += " ORDER BY " + orderBy
+		sqlQuery += " ORDER BY " + orderBy //nolint:gosec // orderBy is built from validated BQL field names
 	} else {
 		sqlQuery += " ORDER BY i.updated_at DESC"
 	}

@@ -50,17 +50,16 @@ func OpenCmd(content string) tea.Cmd {
 
 		// Write content and close
 		if _, err := tmpFile.WriteString(content); err != nil {
-			_ = os.Remove(tmpPath)
+			_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp, not user input
 			return FinishedMsg{Err: err}
 		}
 		if err := tmpFile.Close(); err != nil {
-			_ = os.Remove(tmpPath)
+			_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp, not user input
 			return FinishedMsg{Err: err}
 		}
 
 		// Create the editor command
-		// #nosec G204 -- editor command is from trusted env vars (VISUAL/EDITOR) or hardcoded "vi"
-		cmd := exec.Command(editor, tmpPath)
+		cmd := exec.Command(editor, tmpPath) //nolint:gosec // editor is from trusted env vars (VISUAL/EDITOR) or hardcoded "vi"
 
 		// Return an ExecMsg that will be handled by the parent
 		return ExecMsg{

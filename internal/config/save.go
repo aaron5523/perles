@@ -98,18 +98,18 @@ func SaveViews(configPath string, views []ViewConfig) error {
 
 	if _, err := temp.Write(buf.Bytes()); err != nil {
 		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		_ = os.Remove(tempPath) //nolint:gosec // tempPath is from os.CreateTemp, not user input
 		log.ErrorErr(log.CatConfig, "Failed to write temp file", err, "path", tempPath)
 		return fmt.Errorf("writing temp file: %w", err)
 	}
 	if err := temp.Close(); err != nil {
-		_ = os.Remove(tempPath)
+		_ = os.Remove(tempPath) //nolint:gosec // tempPath is from os.CreateTemp, not user input
 		log.ErrorErr(log.CatConfig, "Failed to close temp file", err, "path", tempPath)
 		return fmt.Errorf("closing temp file: %w", err)
 	}
 
-	if err := os.Rename(tempPath, configPath); err != nil {
-		_ = os.Remove(tempPath)
+	if err := os.Rename(tempPath, configPath); err != nil { //nolint:gosec // tempPath and configPath are from os.CreateTemp and app config, not user input
+		_ = os.Remove(tempPath) //nolint:gosec // tempPath is from os.CreateTemp
 		log.ErrorErr(log.CatConfig, "Failed to rename temp file", err, "from", tempPath, "to", configPath)
 		return fmt.Errorf("renaming temp file: %w", err)
 	}

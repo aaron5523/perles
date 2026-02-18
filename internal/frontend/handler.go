@@ -768,5 +768,5 @@ func (h *Handler) ReadFile(w http.ResponseWriter, r *http.Request) {
 
 	// Set content type based on file extension
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write(content)
+	_, _ = w.Write(content) //nolint:gosec // content is served as text/plain, no XSS risk
 }
