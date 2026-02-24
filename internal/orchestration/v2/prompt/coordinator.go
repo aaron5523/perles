@@ -88,12 +88,10 @@ After receiving a workflow or user instructions, determine required workers:
 - If no spawn instructions at all, spawn workers as needed for the task.
 
 Use the ` + "`" + `spawn_worker` + "`" + ` tool to spawn each required worker.
-- **YOU MUST** end your turn after calling spawn_worker. The workers will send "ready" messages when they become available.
-- **CRITICAL** workers are not automatically ready after spawning, they will message you when ready.
-- **NEVER** Call spawn_worker then immediately send_to_worker or assign_task without the worker telling you they are "ready".
+- **YOU MUST** end your turn after calling spawn_worker. The workers will send ready messages when they become available.
+- **NEVER** Call spawn_worker then immediately fabric_send or assign_task without the worker posting they are ready.
 
 **IMPORTANT**:
-- Wait for all spawned workers to send "ready" messages before proceeding after using spawn_worker.
 - **ONLY** once all required workers have told you they are ready, proceed to Phase 3.
 
 ### Phase 3 — Confirm with User
@@ -199,12 +197,12 @@ func BuildWorkerOutOfContextPrompt(workerID string, taskID string) string {
 
 	prompt.WriteString("REQUIRED ACTION:\n")
 	fmt.Fprintf(&prompt, "1. Use `replace_worker` tool to replace `%s` with a fresh worker\n", workerID)
-	prompt.WriteString("2. Wait for the new worker to send a \"ready\" message\n")
+	prompt.WriteString("2. The new worker will post a message when they are ready. Do not move to step 3 until they have posted a message.")
 
 	if taskID != "" {
 		fmt.Fprintf(&prompt, "3. The previous worker was working on task `%s`. Use `assign_task` to assign this task to the new worker and include in the summary they need to check for existing work since they are taking over from a previous worker.\n", taskID)
 	} else {
-		prompt.WriteString("3. The previous worker had no assigned task. Use `send_to_worker` to send the new worker instructions for what to work on and include in the summary they need to check for existing work since they are taking over from a previous worker.\n")
+		prompt.WriteString("3. The previous worker had no assigned task. Use `fabric_send` to send the new worker instructions for what to work on and include in the summary they need to check for existing work since they are taking over from a previous worker.\n")
 	}
 
 	prompt.WriteString("\nDo NOT attempt to send messages to the old worker - it cannot process them.\n")

@@ -410,16 +410,7 @@ func TestV2Integration_FullWorkflow(t *testing.T) {
 	assert.Equal(t, events.ProcessPhaseImplementing, *implementer.Phase)
 	assert.Equal(t, taskID, implementer.TaskID)
 
-	// Step 4: Send message to implementer
-	msgArgs, _ := json.Marshal(map[string]string{
-		"worker_id": implementerID,
-		"message":   "Please implement the feature",
-	})
-	result, err = stack.adapter.HandleSendToWorker(stack.ctx, msgArgs)
-	require.NoError(t, err)
-	require.False(t, result.IsError)
-
-	// Step 5: Report implementation complete
+	// Step 4: Report implementation complete
 	completeArgs, _ := json.Marshal(map[string]string{
 		"summary": "Implementation complete",
 	})
@@ -433,7 +424,7 @@ func TestV2Integration_FullWorkflow(t *testing.T) {
 		return w.Phase != nil && *w.Phase == events.ProcessPhaseAwaitingReview
 	}, time.Second, 10*time.Millisecond)
 
-	// Step 6: Assign review to reviewer
+	// Step 5: Assign review to reviewer
 	reviewArgs, _ := json.Marshal(map[string]string{
 		"reviewer_id":    reviewerID,
 		"task_id":        taskID,
@@ -447,7 +438,7 @@ func TestV2Integration_FullWorkflow(t *testing.T) {
 	reviewer, _ := stack.processRepo.Get(reviewerID)
 	assert.Equal(t, events.ProcessPhaseReviewing, *reviewer.Phase)
 
-	// Step 7: Report review verdict (APPROVED)
+	// Step 6: Report review verdict (APPROVED)
 	verdictArgs, _ := json.Marshal(map[string]string{
 		"verdict":  "APPROVED",
 		"comments": "LGTM!",
@@ -691,69 +682,6 @@ func TestV2Integration_ReplaceWorker(t *testing.T) {
 	readyWorkers := stack.processRepo.ReadyWorkers()
 	require.Len(t, readyWorkers, 1, "should have exactly one ready worker")
 	assert.NotEqual(t, workerID, readyWorkers[0].ID, "new worker should have different ID")
-}
-
-// ===========================================================================
-// Integration Test: Message Queue Flow
-// ===========================================================================
-
-// TestV2Integration_MessageQueueFlow tests message queuing when worker is busy.
-func TestV2Integration_MessageQueueFlow(t *testing.T) {
-	stack := newTestV2Stack(t)
-	defer stack.cleanup()
-
-	// Spawn a worker
-	workerID := stack.spawnWorkerAndWaitReady(t)
-
-	// Assign task (makes worker busy)
-	taskID := "queue-t001"
-	assignArgs, _ := json.Marshal(map[string]string{
-		"worker_id": workerID,
-		"task_id":   taskID,
-		"summary":   "Test task",
-	})
-	result, err := stack.adapter.HandleAssignTask(stack.ctx, assignArgs)
-	require.NoError(t, err)
-	require.False(t, result.IsError)
-
-	// Worker should be busy (implementing)
-	worker, _ := stack.processRepo.Get(workerID)
-	assert.Equal(t, repository.StatusWorking, worker.Status)
-
-	// Send messages while busy - they should be queued
-	for i := 0; i < 3; i++ {
-		msgArgs, _ := json.Marshal(map[string]string{
-			"worker_id": workerID,
-			"message":   "Queued message",
-		})
-		result, err = stack.adapter.HandleSendToWorker(stack.ctx, msgArgs)
-		require.NoError(t, err)
-		require.False(t, result.IsError)
-	}
-
-	// Verify messages are queued (3 sends only - task assignment prompt was delivered immediately by follow-up)
-	queueSize := stack.queueRepo.Size(workerID)
-	assert.Equal(t, 3, queueSize, "messages should be queued while worker is busy (3 sends)")
-
-	// Complete the task - this should trigger queue delivery for at least one message
-	completeArgs, _ := json.Marshal(map[string]string{
-		"summary": "Done",
-	})
-	completeResult, err := stack.adapter.HandleReportImplementationComplete(stack.ctx, completeArgs, workerID)
-	require.NoError(t, err)
-	require.True(t, completeResult.Success)
-
-	// After task completion, a DeliverQueued follow-up is submitted.
-	// Wait for the processor to have processed enough commands (avoid race with Size())
-	require.Eventually(t, func() bool {
-		// 1 spawn + assign + 3 sends + report_complete + deliver_queued = 6
-		return stack.processor.ProcessedCount() >= 6
-	}, time.Second, 10*time.Millisecond, "commands should be processed")
-
-	// DeliverQueued handler delivers ONE message and transitions worker to Working.
-	// After processing, the queue should have fewer than 3 messages.
-	newSize := stack.queueRepo.Size(workerID)
-	assert.Less(t, newSize, 3, "at least one queued message should be delivered after task completion")
 }
 
 // ===========================================================================
@@ -1045,114 +973,6 @@ func registerHandlersWithWiring(
 }
 
 // ===========================================================================
-// E2E Integration Test: Message Delivery Wiring
-// ===========================================================================
-
-// TestV2E2E_MessageDelivery verifies that MessageDeliverer is correctly wired
-// and messages are delivered to workers through the full pipeline.
-func TestV2E2E_MessageDelivery(t *testing.T) {
-	stack := newTestV2StackWithWiring(t)
-	defer stack.cleanup()
-
-	// Step 1: Spawn a worker via v2
-	workerID := stack.spawnWorkerAndWaitReady(t)
-	require.NotEmpty(t, workerID)
-
-	// Step 2: Send message to the ready worker via SendToProcessCommand
-	msgContent := "Hello from coordinator - test message"
-	msgArgs, _ := json.Marshal(map[string]string{
-		"worker_id": workerID,
-		"message":   msgContent,
-	})
-
-	result, err := stack.adapter.HandleSendToWorker(stack.ctx, msgArgs)
-	require.NoError(t, err)
-	require.False(t, result.IsError, "send should succeed: %s", result.Content)
-
-	// Step 3: Verify MessageDeliverer.Deliver was called with correct content
-	// Since worker is Ready, message should be delivered immediately (not queued)
-	require.Eventually(t, func() bool {
-		deliveries := stack.mockDeliverer.getDeliveries()
-		return len(deliveries) > 0
-	}, time.Second, 10*time.Millisecond, "message should be delivered")
-
-	deliveries := stack.mockDeliverer.getDeliveries()
-	require.Len(t, deliveries, 1, "should have exactly one delivery")
-	assert.Equal(t, workerID, deliveries[0].WorkerID)
-	assert.Equal(t, msgContent, deliveries[0].Content)
-
-	// Step 4: Verify worker status was updated to Working after delivery
-	worker, err := stack.processRepo.Get(workerID)
-	require.NoError(t, err)
-	assert.Equal(t, repository.StatusWorking, worker.Status, "worker should be Working after message delivery")
-}
-
-// TestV2E2E_MessageDelivery_QueuedThenDelivered verifies message queuing when worker is busy.
-func TestV2E2E_MessageDelivery_QueuedThenDelivered(t *testing.T) {
-	stack := newTestV2StackWithWiring(t)
-	defer stack.cleanup()
-
-	// Step 1: Spawn worker and assign task (makes worker busy)
-	workerID := stack.spawnWorkerAndWaitReady(t)
-	taskID := "queue-t001"
-
-	assignArgs, _ := json.Marshal(map[string]string{
-		"worker_id": workerID,
-		"task_id":   taskID,
-		"summary":   "Test task",
-	})
-	result, err := stack.adapter.HandleAssignTask(stack.ctx, assignArgs)
-	require.NoError(t, err)
-	require.False(t, result.IsError)
-
-	// Clear BD updates from task assignment
-	time.Sleep(50 * time.Millisecond) // Let async BD update complete
-
-	// Step 2: Send message while worker is busy - should be queued
-	msgContent := "Queued message for busy worker"
-	msgArgs, _ := json.Marshal(map[string]string{
-		"worker_id": workerID,
-		"message":   msgContent,
-	})
-
-	result, err = stack.adapter.HandleSendToWorker(stack.ctx, msgArgs)
-	require.NoError(t, err)
-	require.False(t, result.IsError)
-
-	// Step 3: Verify message was queued (not delivered yet)
-	// Queue now has: 1 message we just sent (task prompt was delivered immediately by follow-up)
-	queueSize := stack.queueRepo.Size(workerID)
-	assert.Equal(t, 1, queueSize, "message should be queued while worker is busy (1 send)")
-
-	// Task prompt was already delivered by the follow-up command
-	deliveries := stack.mockDeliverer.getDeliveries()
-	assert.Len(t, deliveries, 1, "task prompt should have been delivered by follow-up")
-
-	// Step 4: Complete task - triggers DeliverQueued follow-up
-	completeArgs, _ := json.Marshal(map[string]string{
-		"summary": "Done",
-	})
-	completeResult, err := stack.adapter.HandleReportImplementationComplete(stack.ctx, completeArgs, workerID)
-	require.NoError(t, err)
-	require.True(t, completeResult.Success)
-
-	// Step 5: Verify at least one queued message was delivered after task completion
-	// DeliverQueued delivers ONE message per invocation (the user message in queue)
-	require.Eventually(t, func() bool {
-		deliveries := stack.mockDeliverer.getDeliveries()
-		return len(deliveries) >= 2 // task prompt + user message
-	}, time.Second, 10*time.Millisecond, "at least one queued message should be delivered after task completion")
-
-	deliveries = stack.mockDeliverer.getDeliveries()
-	require.GreaterOrEqual(t, len(deliveries), 2, "should have at least 2 deliveries (task prompt + user message)")
-	assert.Equal(t, workerID, deliveries[0].WorkerID)
-
-	// Queue should be empty now (task prompt delivered on assign, user message delivered on complete)
-	queueSize = stack.queueRepo.Size(workerID)
-	assert.Equal(t, 0, queueSize, "queue should be empty after deliveries")
-}
-
-// ===========================================================================
 // E2E Integration Test: BD Sync Wiring
 // ===========================================================================
 
@@ -1433,27 +1253,8 @@ func TestV2E2E_FullWorkflow(t *testing.T) {
 		return len(updates) > 0 && updates[0].TaskID == taskID
 	}, time.Second, 10*time.Millisecond, "BD should be updated on task assignment")
 
-	// Step 3: Send message to implementer (verify delivery)
-	t.Log("Step 3: Sending message to worker")
-	// First, we need to transition worker back to Ready state to receive message
-	// Actually, messages to busy workers get queued, so let's just verify queuing
-	msgContent := "Additional context for implementation"
-	msgArgs, _ := json.Marshal(map[string]string{
-		"worker_id": implementerID,
-		"message":   msgContent,
-	})
-
-	result, err = stack.adapter.HandleSendToWorker(stack.ctx, msgArgs)
-	require.NoError(t, err)
-	require.False(t, result.IsError)
-
-	// Message should be queued since worker is busy (Implementing phase)
-	// Queue has: 1 message (task prompt was delivered immediately by follow-up)
-	queueSize := stack.queueRepo.Size(implementerID)
-	assert.Equal(t, 1, queueSize, "messages should be queued for busy worker (1 send)")
-
-	// Step 4: Report implementation complete (verify BD comment + queue drain)
-	t.Log("Step 4: Reporting implementation complete")
+	// Step 3: Report implementation complete (verify BD comment + queue drain)
+	t.Log("Step 3: Reporting implementation complete")
 	completeArgs, _ := json.Marshal(map[string]string{
 		"summary": "Implemented full workflow with comprehensive tests",
 	})
@@ -1473,19 +1274,14 @@ func TestV2E2E_FullWorkflow(t *testing.T) {
 		return false
 	}, time.Second, 10*time.Millisecond, "BD comment should be added on complete")
 
-	// Verify at least one queued message was delivered (DeliverQueued follow-up)
-	// The first message in queue is the task assignment prompt, not the user message
+	// Verify task prompt was delivered
 	require.Eventually(t, func() bool {
 		deliveries := stack.mockDeliverer.getDeliveries()
 		return len(deliveries) >= 1
-	}, time.Second, 10*time.Millisecond, "at least one queued message should be delivered")
+	}, time.Second, 10*time.Millisecond, "task prompt should be delivered")
 
-	deliveries := stack.mockDeliverer.getDeliveries()
-	assert.GreaterOrEqual(t, len(deliveries), 1, "should have at least 1 delivery (task prompt)")
-	// User message may still be in queue since only one DeliverQueued was triggered
-
-	// Step 5: Assign review
-	t.Log("Step 5: Assigning review")
+	// Step 4: Assign review
+	t.Log("Step 4: Assigning review")
 	reviewArgs, _ := json.Marshal(map[string]string{
 		"reviewer_id":    reviewerID,
 		"task_id":        taskID,
@@ -1500,8 +1296,8 @@ func TestV2E2E_FullWorkflow(t *testing.T) {
 	reviewer, _ := stack.processRepo.Get(reviewerID)
 	assert.Equal(t, events.ProcessPhaseReviewing, *reviewer.Phase)
 
-	// Step 6: Report verdict APPROVED (verify BD comment)
-	t.Log("Step 6: Reporting review verdict")
+	// Step 5: Report verdict APPROVED (verify BD comment)
+	t.Log("Step 5: Reporting review verdict")
 	initialComments := len(getComments(stack.mockBDExecutor))
 
 	verdictArgs, _ := json.Marshal(map[string]string{
@@ -1519,8 +1315,8 @@ func TestV2E2E_FullWorkflow(t *testing.T) {
 		return len(comments) > initialComments
 	}, time.Second, 10*time.Millisecond, "BD comment should be added on verdict")
 
-	// Step 7: Verify final state
-	t.Log("Step 7: Verifying final state")
+	// Step 6: Verify final state
+	t.Log("Step 6: Verifying final state")
 
 	// Task should be approved
 	task, err := stack.taskRepo.Get(taskID)
@@ -1535,7 +1331,7 @@ func TestV2E2E_FullWorkflow(t *testing.T) {
 	impl, _ := stack.processRepo.Get(implementerID)
 	assert.Equal(t, events.ProcessPhaseAwaitingReview, *impl.Phase)
 
-	// Step 8: Verify events were received (EventBus wiring)
+	// Step 7: Verify events were received (EventBus wiring)
 	time.Sleep(100 * time.Millisecond) // Let events propagate
 	eventsMu.Lock()
 	eventCount := len(receivedEvents)

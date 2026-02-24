@@ -48,7 +48,6 @@ func TestObserverServer_ReadOnlyTools(t *testing.T) {
 	forbiddenTools := []string{
 		"spawn_worker",
 		"assign_task",
-		"send_to_worker",
 		"get_task_status",
 		"mark_task_complete",
 		"mark_task_failed",

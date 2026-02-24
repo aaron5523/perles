@@ -306,63 +306,6 @@ func TestHandleReplaceProcess(t *testing.T) {
 }
 
 // ===========================================================================
-// Messaging Tests (Batch 2)
-// ===========================================================================
-
-func TestHandleSendToWorker(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		adapter, handler, cleanup := testAdapter(t)
-		defer cleanup()
-
-		args := toJSON(t, map[string]string{
-			"worker_id": "worker-123",
-			"message":   "Hello worker!",
-		})
-
-		result, err := adapter.HandleSendToWorker(context.Background(), args)
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.False(t, result.IsError)
-		assert.Contains(t, result.Content[0].Text, "worker-123")
-
-		// Verify command
-		cmds := handler.getCommands()
-		require.Len(t, cmds, 1)
-		sendCmd, ok := cmds[0].(*command.SendToProcessCommand)
-		require.True(t, ok)
-		assert.Equal(t, "worker-123", sendCmd.ProcessID)
-		assert.Equal(t, "Hello worker!", sendCmd.Content)
-	})
-
-	t.Run("missing_worker_id", func(t *testing.T) {
-		adapter, _, cleanup := testAdapter(t)
-		defer cleanup()
-
-		args := toJSON(t, map[string]string{"message": "test"})
-
-		result, err := adapter.HandleSendToWorker(context.Background(), args)
-
-		require.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "process_id is required")
-	})
-
-	t.Run("missing_message", func(t *testing.T) {
-		adapter, _, cleanup := testAdapter(t)
-		defer cleanup()
-
-		args := toJSON(t, map[string]string{"worker_id": "worker-123"})
-
-		result, err := adapter.HandleSendToWorker(context.Background(), args)
-
-		require.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "content is required")
-	})
-}
-
-// ===========================================================================
 // Task Assignment Tests (Batch 3-4)
 // ===========================================================================
 

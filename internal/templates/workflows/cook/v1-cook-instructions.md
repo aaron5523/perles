@@ -58,10 +58,11 @@ For each task in sequence (from first to last) NEVER parallelize only work on a 
      - Tracks the assignment for state queries
      - Sends task details to worker
 
-3. **Optionally send supplementary context** via `send_to_worker` if needed:
+3. **Optionally send supplementary context** via `fabric_reply` on the task thread:
    ```
-   send_to_worker(worker_id, "Additional context: <details>")
+   fabric_reply(message_id="<task-thread-id>", content="Additional context: <details>")
    ```
+   Since `assign_task` creates a fabric thread, use `fabric_reply` to add clarifications or instructions to that same thread.
 
 **Note:** The worker will receive instructions to call `report_implementation_complete` when done, which transitions them to `AwaitingReview` phase.
 
@@ -347,14 +348,6 @@ Use structured MCP tools for all state-changing operations:
 | Send denial feedback | `assign_review_feedback(implementer_id, task_id, feedback)` | Send fixes needed after denial |
 | Approve commit | `approve_commit(implementer_id, task_id, commit_message)` | Authorize implementer to commit |
 
-### Coordinator → Worker: Free-Form Messages (Supplementary)
-
-Use `send_to_worker(worker_id, message)` **only** for:
-- Clarifications or additional context after task assignment
-- Nudges or reminders
-- Custom instructions not covered by structured tools
-- **NOT** for state-changing operations (use structured tools instead)
-
 ### Worker → Coordinator: Structured Tools (State Transitions)
 
 Workers use these MCP tools to signal workflow state changes:
@@ -627,7 +620,6 @@ Coordinator: signal_workflow_complete(
 ❌ **Re-assigning already assigned work** - Check if you've already assigned a reviewer/committer
 ❌ **Assigning work to replacement workers immediately** - Let them sit idle as backups
 ❌ **Saying "No response requested" without explanation** - Always explain why you're not taking action
-❌ **Using send_to_worker for state changes** - Use structured tools (assign_task, assign_task_review, etc.) instead
 ❌ **Skipping query_worker_state** - Always check state before making assignments
 ❌ **Asking reviewer to re-review without assign_task_review** - After denial, reviewer is in Idle phase and MUST be re-assigned via `assign_task_review` before they can submit another verdict
 ❌ **Replacing only one worker** - ALWAYS replace BOTH implementer AND reviewer after each task completes
@@ -666,10 +658,10 @@ Coordinator: signal_workflow_complete(
 
 #### Supplementary Communication
 
-| Tool | Parameters | Purpose                                                           |
-|------|------------|-------------------------------------------------------------------|
-| `send_to_worker` | `worker_id`, `message` | Send clarifications or additional context (NOT for state changes) |
-| `notify_user`                    | none | Send a notification to the user when they are needed |
+| Tool | Parameters | Purpose |
+|------|------------|---------|
+| `fabric_reply` | `message_id`, `content` | Reply on a task thread with clarifications or additional context |
+| `notify_user` | `message` | Send a notification to the user when they are needed |
 
 ### Worker MCP Tools
 
@@ -746,39 +738,33 @@ assign_task_review(reviewer_id="worker-2", task_id="perles-abc.1", implementer_i
 
 ---
 
-## Hybrid Approach: Structured Tools + send_to_worker
+## Structured Tools + fabric_reply
 
-This workflow uses a **hybrid approach** for communication:
+All coordinator-to-worker communication uses **structured tools**, with `fabric_reply` for supplementary details:
 
-### Use Structured Tools For:
-
-✅ **All state-changing operations**
-- Task assignment → `assign_task`
+### State-Changing Operations
+- Task assignment → `assign_task` (creates a fabric thread)
 - Review assignment → `assign_task_review`
 - Denial feedback → `assign_review_feedback`
 - Commit approval → `approve_commit`
 
-✅ **State queries**
+### State Queries
 - Check availability → `query_worker_state`
 
-### Use send_to_worker For:
+### Supplementary Context
+- Clarifications after assignment → `fabric_reply` on the task thread
+- Additional instructions or nudges → `fabric_reply`
 
-✅ **Supplementary communication only**
-- Additional context after task assignment
-- Clarifications about requirements
-- Nudges or reminders
-- Custom instructions not in structured tool prompts
-
-### Rule: "Structured tools for state changes, send_to_worker for details"
+### Rule: "Structured tools for state changes, fabric_reply for details"
 
 **Good:**
 ```
 assign_task(worker_id="worker-1", task_id="perles-abc.1")
-send_to_worker(worker_id="worker-1", "Note: Pay special attention to error handling in the validation logic")
+fabric_reply(message_id="<task-thread-id>", content="Note: Pay special attention to error handling in the validation logic")
 ```
 
 **Bad:**
 ```
-# Don't use send_to_worker for task assignment!
-send_to_worker(worker_id="worker-1", "You are being assigned task perles-abc.1...")  # ❌ NO STATE TRACKING
+# Don't use fabric_reply for task assignment!
+fabric_reply(message_id="...", content="You are being assigned task perles-abc.1...")  # ❌ NO STATE TRACKING
 ```

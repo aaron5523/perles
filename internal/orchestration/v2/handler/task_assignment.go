@@ -157,10 +157,10 @@ func (h *AssignTaskHandler) handleAssign(_ context.Context, assignCmd *command.A
 
 	issue, err := h.bdExecutor.ShowIssue(assignCmd.TaskID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get bd issue: %w. did you mean to use send_to_worker", err)
+		return nil, fmt.Errorf("failed to get bd issue: %w. did you mean to use fabric_send", err)
 	}
 	if issue == nil {
-		return nil, fmt.Errorf("bd issue not found: %s. did you mean to use send_to_worker", proc.TaskID)
+		return nil, fmt.Errorf("bd issue not found: %s. did you mean to use fabric_send", proc.TaskID)
 	}
 
 	// Also check task repo for any task where this process is implementer

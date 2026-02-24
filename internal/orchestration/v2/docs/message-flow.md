@@ -138,7 +138,6 @@ flowchart TB
     subgraph Writes["Write Path (Ordered)"]
         W1["HandleSpawnProcess"]
         W2["HandleAssignTask"]
-        W3["HandleSendToWorker"]
     end
     
     subgraph Repos["Repositories"]

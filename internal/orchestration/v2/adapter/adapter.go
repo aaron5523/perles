@@ -123,12 +123,6 @@ type replaceWorkerArgs struct {
 	Reason   string `json:"reason,omitempty"`
 }
 
-// sendToWorkerArgs holds arguments for send_to_worker tool.
-type sendToWorkerArgs struct {
-	WorkerID string `json:"worker_id"`
-	Message  string `json:"message"`
-}
-
 // assignTaskArgs holds arguments for assign_task tool.
 type assignTaskArgs struct {
 	WorkerID string `json:"worker_id"`
@@ -494,34 +488,6 @@ func (a *V2Adapter) HandleQueryWorkerState(_ context.Context, args json.RawMessa
 	}
 
 	return mcptypes.StructuredResult(string(jsonBytes), response), nil
-}
-
-// ===========================================================================
-// Messaging Handlers (Batch 2)
-// ===========================================================================
-
-// HandleSendToWorker handles the send_to_worker MCP tool call.
-func (a *V2Adapter) HandleSendToWorker(ctx context.Context, args json.RawMessage) (*mcptypes.ToolCallResult, error) {
-	var parsed sendToWorkerArgs
-	if err := json.Unmarshal(args, &parsed); err != nil {
-		return nil, fmt.Errorf("invalid arguments: %w", err)
-	}
-
-	cmd := command.NewSendToProcessCommand(command.SourceMCPTool, parsed.WorkerID, parsed.Message)
-	if err := cmd.Validate(); err != nil {
-		return nil, fmt.Errorf("send_to_worker command validation failed: %w", err)
-	}
-
-	result, err := a.submitWithTimeout(ctx, cmd)
-	if err != nil {
-		return nil, fmt.Errorf("send_to_worker command failed: %w", err)
-	}
-
-	if !result.Success {
-		return mcptypes.ErrorResult(result.Error.Error()), nil
-	}
-
-	return mcptypes.SuccessResult(fmt.Sprintf("Message sent to worker %s", parsed.WorkerID)), nil
 }
 
 // ===========================================================================

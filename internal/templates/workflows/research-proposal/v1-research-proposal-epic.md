@@ -48,9 +48,10 @@ assign_task(worker_id="worker-2", task_id="<task-id>", instructions="<from task 
 get_task_status(task_id="<task-id>")
 ```
 
-### Sending Messages
+### Sending Follow-Up Context
+Since `assign_task` creates a fabric thread, use `fabric_reply` to send clarifications or additional instructions:
 ```
-send_to_worker(worker_id="worker-2", message="<clarification or instruction>")
+fabric_reply(message_id="<task-thread-id>", content="<clarification or instruction>")
 ```
 
 ### Completing Tasks

@@ -21,14 +21,14 @@ The epic will define specific roles and responsibilities for each worker.
 | `mark_task_complete(task_id)` | Mark task done | **You must call this** after worker confirms completion |
 | `mark_task_failed(task_id, reason)` | Mark task failed | Use when task cannot be completed |
 
-**Important**: `assign_task` only works for bd tasks. For non-bd work, use `send_to_worker` instead.
+**Important**: `assign_task` only works for bd tasks. For non-bd work, use `fabric_send` instead.
 
 ### Worker Communication
 
 | Tool | Purpose | When to Use |
 |------|---------|-------------|
 | `spawn_worker(role, instructions)` | Create a new worker | When you need additional workers beyond initial pool |
-| `send_to_worker(worker_id, message)` | Send message to worker | For non-bd work, clarifications, or additional context |
+| `fabric_send(channel, message)` | Send message to worker | For clarifications, additional context, or non-bd work |
 | `retire_worker(worker_id, reason)` | Retire a worker | When worker is no longer needed or context is stale |
 | `query_worker_state(worker_id, task_id)` | Check worker/task state | To verify worker availability after receiving ready signals |
 
@@ -138,7 +138,7 @@ assign_task(worker_id="worker-2", task_id="proj-abc.2", summary="...")
 - **Doing work yourself instead of assigning to a worker** — tasks must be delegated via `assign_task`. The coordinator is an orchestrator, not a worker.
 - Calling `query_worker_state()` immediately after spawning instead of waiting for ready signals
 - Trying to assign tasks in the same turn as spawning workers
-- Using `send_to_worker` as a workaround when `assign_task` fails due to workers not being ready
+- Using `fabric_send` as a workaround when `assign_task` fails due to workers not being ready
 
 ## Key Principles
 
