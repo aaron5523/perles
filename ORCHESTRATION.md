@@ -209,7 +209,7 @@ And individual task markdown files that are referenced in the yaml file.
 | `key` | string | Yes | Stable identifier for template access (e.g., `{{.Inputs.plan}}`) |
 | `file` | string | Yes | Filename, may contain template syntax (e.g., `"{{.Date}}-report.md"`) |
 
-`~/.perles/workflows/{your_workflow_name}/templates.yaml`
+`~/.perles/workflows/{your_workflow_name}/template.yaml`
 ```yaml
 registry:
   - namespace: "workflow"
