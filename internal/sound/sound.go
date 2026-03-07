@@ -1,6 +1,7 @@
 package sound
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -153,7 +154,7 @@ func (s *SystemSoundService) playExternalAsync(filePath, soundFile, useCase stri
 
 	// Build command args and execute
 	args := s.buildArgs(filePath)
-	cmd := exec.Command(s.audioCommand, args...) //nolint:gosec // audioCommand validated at construction
+	cmd := exec.CommandContext(context.Background(), s.audioCommand, args...) //nolint:gosec // audioCommand validated at construction
 	if err := cmd.Run(); err != nil {
 		log.Debug(log.CatConfig, "External audio playback failed", "path", filePath, "useCase", useCase, "error", err)
 		return
@@ -198,7 +199,7 @@ func (s *SystemSoundService) playEmbeddedFallback(soundFile, useCase string) {
 	}
 
 	args := s.buildArgs(tmpPath)
-	cmd := exec.Command(s.audioCommand, args...) //nolint:gosec // audioCommand validated at construction
+	cmd := exec.CommandContext(context.Background(), s.audioCommand, args...) //nolint:gosec // audioCommand validated at construction
 	if err := cmd.Run(); err != nil {
 		log.Debug(log.CatConfig, "Fallback audio playback failed", "soundFile", soundFile, "error", err)
 		return
@@ -239,7 +240,7 @@ func (s *SystemSoundService) playAsync(name string, data []byte) {
 
 	// Execute audio command - audioCommand is validated at construction time
 	// via detectAudioCommand which only returns commands found in PATH
-	cmd := exec.Command(s.audioCommand, args...) //nolint:gosec // audioCommand validated at construction
+	cmd := exec.CommandContext(context.Background(), s.audioCommand, args...) //nolint:gosec // audioCommand validated at construction
 	if err := cmd.Run(); err != nil {
 		log.Debug(log.CatConfig, "Audio playback failed", "name", name, "error", err)
 		return

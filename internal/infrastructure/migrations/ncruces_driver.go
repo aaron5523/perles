@@ -11,6 +11,7 @@
 package migrations
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -50,7 +51,7 @@ func WithInstance(instance *sql.DB, config *Config) (database.Driver, error) {
 		return nil, ErrNilConfig
 	}
 
-	if err := instance.Ping(); err != nil {
+	if err := instance.PingContext(context.Background()); err != nil {
 		return nil, err
 	}
 
@@ -85,7 +86,7 @@ func (m *NCrucesSqlite) ensureVersionTable() (err error) {
 	CREATE UNIQUE INDEX IF NOT EXISTS version_unique ON %s (version);
 	`, m.config.MigrationsTable, m.config.MigrationsTable)
 
-	if _, err := m.db.Exec(query); err != nil {
+	if _, err := m.db.ExecContext(context.Background(), query); err != nil {
 		return err
 	}
 	return nil
@@ -133,11 +134,11 @@ func (m *NCrucesSqlite) Run(migration io.Reader) error {
 }
 
 func (m *NCrucesSqlite) executeQuery(query string) error {
-	tx, err := m.db.Begin()
+	tx, err := m.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return &database.Error{OrigErr: err, Err: "transaction start failed"}
 	}
-	if _, err := tx.Exec(query); err != nil {
+	if _, err := tx.ExecContext(context.Background(), query); err != nil {
 		if errRollback := tx.Rollback(); errRollback != nil {
 			err = errors.Join(err, errRollback)
 		}
@@ -150,7 +151,7 @@ func (m *NCrucesSqlite) executeQuery(query string) error {
 }
 
 func (m *NCrucesSqlite) executeQueryNoTx(query string) error {
-	if _, err := m.db.Exec(query); err != nil {
+	if _, err := m.db.ExecContext(context.Background(), query); err != nil {
 		return &database.Error{OrigErr: err, Query: []byte(query)}
 	}
 	return nil
@@ -158,13 +159,13 @@ func (m *NCrucesSqlite) executeQueryNoTx(query string) error {
 
 // SetVersion sets the current migration version.
 func (m *NCrucesSqlite) SetVersion(version int, dirty bool) error {
-	tx, err := m.db.Begin()
+	tx, err := m.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return &database.Error{OrigErr: err, Err: "transaction start failed"}
 	}
 
 	query := "DELETE FROM " + m.config.MigrationsTable //nolint:gosec // table name is from trusted config, not user input
-	if _, err := tx.Exec(query); err != nil {
+	if _, err := tx.ExecContext(context.Background(), query); err != nil {
 		if errRollback := tx.Rollback(); errRollback != nil {
 			err = errors.Join(err, errRollback)
 		}
@@ -176,7 +177,7 @@ func (m *NCrucesSqlite) SetVersion(version int, dirty bool) error {
 	// See: https://github.com/golang-migrate/migrate/issues/330
 	if version >= 0 || (version == database.NilVersion && dirty) {
 		query := fmt.Sprintf(`INSERT INTO %s (version, dirty) VALUES (?, ?)`, m.config.MigrationsTable) //nolint:gosec // table name is from trusted config, not user input
-		if _, err := tx.Exec(query, version, dirty); err != nil {
+		if _, err := tx.ExecContext(context.Background(), query, version, dirty); err != nil {
 			if errRollback := tx.Rollback(); errRollback != nil {
 				err = errors.Join(err, errRollback)
 			}
@@ -194,7 +195,7 @@ func (m *NCrucesSqlite) SetVersion(version int, dirty bool) error {
 // Version returns the current migration version.
 func (m *NCrucesSqlite) Version() (version int, dirty bool, err error) {
 	query := "SELECT version, dirty FROM " + m.config.MigrationsTable + " LIMIT 1"
-	err = m.db.QueryRow(query).Scan(&version, &dirty)
+	err = m.db.QueryRowContext(context.Background(), query).Scan(&version, &dirty)
 	if err != nil {
 		return database.NilVersion, false, nil
 	}
@@ -204,7 +205,7 @@ func (m *NCrucesSqlite) Version() (version int, dirty bool, err error) {
 // Drop drops all tables in the database.
 func (m *NCrucesSqlite) Drop() (err error) {
 	query := `SELECT name FROM sqlite_master WHERE type = 'table';`
-	tables, err := m.db.Query(query)
+	tables, err := m.db.QueryContext(context.Background(), query)
 	if err != nil {
 		return &database.Error{OrigErr: err, Query: []byte(query)}
 	}
@@ -237,7 +238,7 @@ func (m *NCrucesSqlite) Drop() (err error) {
 	}
 	if len(tableNames) > 0 {
 		query := "VACUUM"
-		_, err = m.db.Exec(query)
+		_, err = m.db.ExecContext(context.Background(), query)
 		if err != nil {
 			return &database.Error{OrigErr: err, Query: []byte(query)}
 		}

@@ -105,7 +105,7 @@ type DefaultListenerFactory struct{}
 
 // Create implements ListenerFactory.
 func (f *DefaultListenerFactory) Create(address string) (net.Listener, error) {
-	return net.Listen("tcp", address)
+	return (&net.ListenConfig{}).Listen(context.Background(), "tcp", address)
 }
 
 // Default values for worktree configuration.

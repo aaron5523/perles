@@ -728,7 +728,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	}
 
 	// Create listener first to get the actual port (important for :0)
-	listener, err := net.Listen("tcp", cfg.Addr)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", cfg.Addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on %s: %w", cfg.Addr, err)
 	}

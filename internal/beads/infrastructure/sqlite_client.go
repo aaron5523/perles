@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -36,7 +37,7 @@ func NewSQLiteClient(beadsDir string) (*SQLiteClient, error) {
 		log.ErrorErr(log.CatDB, "Failed to open database", err, "path", dbPath)
 		return nil, err
 	}
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(context.Background()); err != nil {
 		log.ErrorErr(log.CatDB, "Failed to ping database", err, "path", dbPath)
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func (c *SQLiteClient) Dialect() appbeads.SQLDialect {
 // Version returns the beads version from the database metadata table.
 func (c *SQLiteClient) Version() (string, error) {
 	var version string
-	err := c.db.QueryRow("SELECT value FROM metadata WHERE key = 'bd_version'").Scan(&version)
+	err := c.db.QueryRowContext(context.Background(), "SELECT value FROM metadata WHERE key = 'bd_version'").Scan(&version)
 	if err != nil {
 		return "", fmt.Errorf("reading bd_version from metadata: %w", err)
 	}
@@ -83,7 +84,7 @@ func (c *SQLiteClient) GetComments(issueID string) ([]domain.Comment, error) {
 		WHERE issue_id = ?
 		ORDER BY created_at ASC
 	`
-	rows, err := c.db.Query(query, issueID)
+	rows, err := c.db.QueryContext(context.Background(), query, issueID)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "GetComments query failed", err, "issueID", issueID)
 		return nil, err

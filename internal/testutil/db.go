@@ -2,6 +2,7 @@
 package testutil
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
@@ -86,7 +87,7 @@ func NewTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
-	_, err = db.Exec(Schema)
+	_, err = db.ExecContext(context.Background(), Schema)
 	require.NoError(t, err)
 	return db
 }

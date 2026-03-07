@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -53,7 +54,7 @@ func (r *sessionRepository) Save(session *domain.Session) error {
 
 	if session.ID() == 0 {
 		// Insert new session
-		result, err := r.db.Exec(
+		result, err := r.db.ExecContext(context.Background(),
 			`INSERT INTO sessions (
 				guid, project, name, state, template_id, epic_id, work_dir, labels,
 				worktree_enabled, worktree_mode, worktree_base_branch, worktree_branch_name, worktree_path, worktree_branch, session_dir,
@@ -80,7 +81,7 @@ func (r *sessionRepository) Save(session *domain.Session) error {
 	}
 
 	// Update existing session
-	_, err := r.db.Exec(
+	_, err := r.db.ExecContext(context.Background(),
 		`UPDATE sessions SET
 			name = ?, state = ?, template_id = ?, epic_id = ?, work_dir = ?, labels = ?,
 			worktree_enabled = ?, worktree_mode = ?, worktree_base_branch = ?, worktree_branch_name = ?, worktree_path = ?, worktree_branch = ?, session_dir = ?,
@@ -105,7 +106,7 @@ func (r *sessionRepository) Save(session *domain.Session) error {
 // Returns SessionNotFoundError if no matching session exists.
 // Soft-deleted sessions are not returned.
 func (r *sessionRepository) FindByGUID(project, guid string) (*domain.Session, error) {
-	row := r.db.QueryRow(
+	row := r.db.QueryRowContext(context.Background(),
 		`SELECT `+sessionColumns+` FROM sessions WHERE project = ? AND guid = ? AND deleted_at IS NULL`,
 		project, guid,
 	)
@@ -124,7 +125,7 @@ func (r *sessionRepository) FindByGUID(project, guid string) (*domain.Session, e
 // Soft-deleted sessions are not returned.
 // Note: This method does not filter by project as it's used for internal lookups.
 func (r *sessionRepository) FindByID(id int64) (*domain.Session, error) {
-	row := r.db.QueryRow(
+	row := r.db.QueryRowContext(context.Background(),
 		`SELECT `+sessionColumns+` FROM sessions WHERE id = ? AND deleted_at IS NULL`,
 		id,
 	)
@@ -141,7 +142,7 @@ func (r *sessionRepository) FindByID(id int64) (*domain.Session, error) {
 // GetActiveSession retrieves the currently running session for a project.
 // Returns NoActiveSessionError if no session is in the running state.
 func (r *sessionRepository) GetActiveSession(project string) (*domain.Session, error) {
-	row := r.db.QueryRow(
+	row := r.db.QueryRowContext(context.Background(),
 		`SELECT `+sessionColumns+` FROM sessions WHERE project = ? AND state = 'running' AND deleted_at IS NULL`,
 		project,
 	)
@@ -159,7 +160,7 @@ func (r *sessionRepository) GetActiveSession(project string) (*domain.Session, e
 // Returns SessionNotFoundError if no matching session exists.
 func (r *sessionRepository) Delete(project, guid string) error {
 	now := time.Now().Unix()
-	result, err := r.db.Exec(
+	result, err := r.db.ExecContext(context.Background(),
 		`UPDATE sessions SET deleted_at = ?, updated_at = ?
 		 WHERE project = ? AND guid = ? AND deleted_at IS NULL`,
 		now, now, project, guid,
@@ -181,7 +182,7 @@ func (r *sessionRepository) Delete(project, guid string) error {
 // DeleteAllForProject performs a hard delete of all sessions for a project.
 // This permanently removes all session records for the specified project.
 func (r *sessionRepository) DeleteAllForProject(project string) error {
-	_, err := r.db.Exec(
+	_, err := r.db.ExecContext(context.Background(),
 		`DELETE FROM sessions WHERE project = ?`,
 		project,
 	)
@@ -228,7 +229,7 @@ func (r *sessionRepository) ListWithFilter(project string, filter domain.ListFil
 		args = append(args, filter.Limit)
 	}
 
-	rows, err := r.db.Query(query, args...)
+	rows, err := r.db.QueryContext(context.Background(), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions: %w", err)
 	}

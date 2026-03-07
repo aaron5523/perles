@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -172,7 +173,11 @@ func isHomebrewInstallation() bool {
 
 // fetchLatestRelease fetches the latest release tag from GitHub.
 func fetchLatestRelease() (string, error) {
-	resp, err := httpClient.Get(githubReleasesAPI)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, githubReleasesAPI, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}

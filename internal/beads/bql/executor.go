@@ -131,7 +131,7 @@ func (e *Executor) Execute(input string) ([]beads.Issue, error) {
 	executeWithSnapshot := func() ([]beads.Issue, error) {
 		var q querier = e.db
 		if e.dialect == appbeads.DialectMySQL {
-			tx, err := e.db.Begin()
+			tx, err := e.db.BeginTx(context.Background(), nil)
 			if err != nil {
 				return nil, fmt.Errorf("begin transaction: %w", err)
 			}

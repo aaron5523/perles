@@ -5,8 +5,10 @@ run:
   tests: false
 
 linters:
-  default: 'none'
+  default: "none"
   enable:
+    - bodyclose
+    - durationcheck
     - errcheck
     - errname
     - errorlint
@@ -15,7 +17,9 @@ linters:
     - govet
     - ineffassign
     - misspell
+    - noctx
     - paralleltest
+    - reassign
     - staticcheck
     - spancheck
     - tagliatelle

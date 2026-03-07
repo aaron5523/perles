@@ -192,7 +192,7 @@ func quotedIDList(ids []string) string {
 func (e *BQLExecutor) loadBlockedIDs() []string {
 	// 1. Load all blocking relationships (flat scan of dependencies table).
 	// NOT INDEXED: bypass corrupt sqlite_autoindex_dependencies_1.
-	depRows, err := e.db.Query(
+	depRows, err := e.db.QueryContext(context.Background(),
 		"SELECT issue_id, depends_on_id FROM dependencies NOT INDEXED WHERE type = 'blocks'",
 	)
 	if err != nil {
@@ -222,7 +222,7 @@ func (e *BQLExecutor) loadBlockedIDs() []string {
 
 	// 2. Load open issue IDs (flat table scan).
 	// NOT INDEXED: bypass corrupt sqlite_autoindex_issues_1.
-	issueRows, err := e.db.Query(
+	issueRows, err := e.db.QueryContext(context.Background(),
 		"SELECT id FROM issues NOT INDEXED WHERE status IN ('open','in_progress','blocked','deferred') AND deleted_at IS NULL",
 	)
 	if err != nil {
@@ -294,7 +294,7 @@ func (e *BQLExecutor) executeBaseQuery(query *bql.Query) ([]task.Issue, error) {
 	}
 
 	// Execute.
-	rows, err := e.db.Query(sqlQuery, params...)
+	rows, err := e.db.QueryContext(context.Background(), sqlQuery, params...)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "beads_rust: BQL query failed", err)
 		return nil, fmt.Errorf("query error: %w", err)
@@ -424,7 +424,7 @@ func (e *BQLExecutor) loadLabels(ids []string, issueMap map[string]*task.Issue) 
 	placeholders, args := inClause(ids)
 	// NOT INDEXED: bypass corrupt sqlite_autoindex_labels_1 created by frankensqlite.
 	//nolint:gosec // G202: placeholders contains only "?" markers from inClause, not user input
-	rows, err := e.db.Query(
+	rows, err := e.db.QueryContext(context.Background(),
 		"SELECT issue_id, label FROM labels NOT INDEXED WHERE issue_id IN ("+placeholders+") ORDER BY issue_id, label",
 		args...,
 	)
@@ -469,7 +469,7 @@ func (e *BQLExecutor) loadDependencies(ids []string, issueMap map[string]*task.I
 		WHERE d.depends_on_id IN (` + placeholders + `)
 		ORDER BY issue_id, depends_on_id`
 
-	rows, err := e.db.Query(query, allArgs...)
+	rows, err := e.db.QueryContext(context.Background(), query, allArgs...)
 	if err != nil {
 		return fmt.Errorf("batch load dependencies: %w", err)
 	}
@@ -519,7 +519,7 @@ func (e *BQLExecutor) loadCommentCounts(ids []string, issueMap map[string]*task.
 	}
 	placeholders, args := inClause(ids)
 	//nolint:gosec // G202: placeholders contains only "?" markers from inClause, not user input
-	rows, err := e.db.Query(
+	rows, err := e.db.QueryContext(context.Background(),
 		"SELECT issue_id, COUNT(*) FROM comments WHERE issue_id IN ("+placeholders+") GROUP BY issue_id",
 		args...,
 	)
@@ -614,7 +614,7 @@ func (e *BQLExecutor) loadDependencyGraphFromDB() (*bql.DependencyGraph, error) 
 
 	// NOT INDEXED on all tables: bypass corrupt autoindices from frankensqlite.
 	// dependencies has sqlite_autoindex_dependencies_1, issues has sqlite_autoindex_issues_1.
-	rows, err := e.db.Query(`
+	rows, err := e.db.QueryContext(context.Background(), `
 		SELECT d.issue_id, d.depends_on_id, d.type
 		FROM dependencies d NOT INDEXED
 		JOIN issues i1 NOT INDEXED ON d.issue_id = i1.id

@@ -3,6 +3,7 @@ package shared
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -88,7 +89,7 @@ func ExecuteAction(action config.ActionConfig, issue *task.Issue, workDir string
 			"workDir", workDir)
 
 		// #nosec G204 -- command is user-configured, shell escaping protects issue content
-		cmd := exec.Command("sh", "-c", rendered)
+		cmd := exec.CommandContext(context.Background(), "sh", "-c", rendered)
 		cmd.Dir = workDir
 
 		// Start the command and return immediately (fire-and-forget)

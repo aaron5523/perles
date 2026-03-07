@@ -2,6 +2,7 @@
 package editor
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
@@ -59,7 +60,7 @@ func OpenCmd(content string) tea.Cmd {
 		}
 
 		// Create the editor command
-		cmd := exec.Command(editor, tmpPath) //nolint:gosec // editor is from trusted env vars (VISUAL/EDITOR) or hardcoded "vi"
+		cmd := exec.CommandContext(context.Background(), editor, tmpPath) //nolint:gosec // editor is from trusted env vars (VISUAL/EDITOR) or hardcoded "vi"
 
 		// Return an ExecMsg that will be handled by the parent
 		return ExecMsg{

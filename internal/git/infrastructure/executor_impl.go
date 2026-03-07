@@ -40,7 +40,7 @@ func (e *RealExecutor) runGit(args ...string) error {
 // runGitOutput executes a git command and returns stdout and any error.
 func (e *RealExecutor) runGitOutput(args ...string) (string, error) {
 	//nolint:gosec // G204: args come from controlled sources
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	if e.workDir != "" {
 		cmd.Dir = e.workDir
 	}

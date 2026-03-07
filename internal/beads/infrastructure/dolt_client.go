@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net"
@@ -51,7 +52,7 @@ func NewDoltServerClient(beadsDir, databaseName, host string, port int, user str
 	log.Debug(log.CatDB, "Connecting to Dolt server", "addr", addr, "database", databaseName)
 
 	// Fail-fast TCP check before MySQL protocol handshake
-	conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+	conn, err := (&net.Dialer{Timeout: 500 * time.Millisecond}).DialContext(context.Background(), "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("dolt server unreachable at %s: %w\n\n"+
 			"The Dolt server may not be running. Start it with:\n"+
@@ -78,7 +79,7 @@ func NewDoltServerClient(beadsDir, databaseName, host string, port int, user str
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("pinging dolt server at %s: %w", addr, err)
 	}
@@ -119,7 +120,7 @@ func (c *DoltClient) Dialect() appbeads.SQLDialect {
 func (c *DoltClient) Version() (string, error) {
 	var version string
 	// `key` is a reserved word in MySQL, must be backtick-quoted
-	err := c.db.QueryRow("SELECT `value` FROM metadata WHERE `key` = ?", "bd_version").Scan(&version)
+	err := c.db.QueryRowContext(context.Background(), "SELECT `value` FROM metadata WHERE `key` = ?", "bd_version").Scan(&version)
 	if err != nil {
 		return "", fmt.Errorf("reading bd_version from metadata: %w", err)
 	}
@@ -134,7 +135,7 @@ func (c *DoltClient) GetComments(issueID string) ([]domain.Comment, error) {
 		WHERE issue_id = ?
 		ORDER BY created_at ASC
 	`
-	rows, err := c.db.Query(query, issueID)
+	rows, err := c.db.QueryContext(context.Background(), query, issueID)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "GetComments query failed", err, "issueID", issueID)
 		return nil, err

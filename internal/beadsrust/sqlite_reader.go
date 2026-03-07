@@ -1,6 +1,7 @@
 package beadsrust
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -48,7 +49,7 @@ func NewSQLiteReader(dataDir string) (*SQLiteReader, error) {
 		log.ErrorErr(log.CatDB, "Failed to open beads_rust database", err, "path", dbPath)
 		return nil, fmt.Errorf("open beads_rust db: %w", err)
 	}
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(context.Background()); err != nil {
 		log.ErrorErr(log.CatDB, "Failed to ping beads_rust database", err, "path", dbPath)
 		return nil, fmt.Errorf("ping beads_rust db: %w", err)
 	}
@@ -90,7 +91,7 @@ func (r *SQLiteReader) ShowIssue(issueID string) (*task.Issue, error) {
 	// NOT INDEXED: bypass corrupt sqlite_autoindex_issues_1 created by frankensqlite.
 	// Forces a table scan instead of using the broken autoindex on issues.id.
 	query := "SELECT" + issueColumns + "FROM issues i NOT INDEXED WHERE i.id = ? AND " + softDeleteFilter
-	row := r.db.QueryRow(query, issueID)
+	row := r.db.QueryRowContext(context.Background(), query, issueID)
 
 	issue, err := scanIssue(row)
 	if err != nil {
@@ -122,7 +123,7 @@ func (r *SQLiteReader) GetComments(issueID string) ([]task.Comment, error) {
 		log.Debug(log.CatDB, "beads_rust GetComments completed", "issueID", issueID, "duration", time.Since(start))
 	}()
 
-	rows, err := r.db.Query(
+	rows, err := r.db.QueryContext(context.Background(),
 		"SELECT id, author, text, created_at FROM comments WHERE issue_id = ? ORDER BY created_at ASC",
 		issueID,
 	)
@@ -234,7 +235,7 @@ func (r *SQLiteReader) loadLabels(ids []string, issueMap map[string]*task.Issue)
 	placeholders, args := inClause(ids)
 	// NOT INDEXED: bypass corrupt sqlite_autoindex_labels_1 created by frankensqlite.
 	//nolint:gosec // G202: placeholders contains only "?" markers from inClause, not user input
-	rows, err := r.db.Query(
+	rows, err := r.db.QueryContext(context.Background(),
 		"SELECT issue_id, label FROM labels NOT INDEXED WHERE issue_id IN ("+placeholders+") ORDER BY issue_id, label",
 		args...,
 	)
@@ -282,7 +283,7 @@ func (r *SQLiteReader) loadDependencies(ids []string, issueMap map[string]*task.
 	allArgs = append(allArgs, args...)
 	allArgs = append(allArgs, args...)
 
-	rows, err := r.db.Query(query, allArgs...)
+	rows, err := r.db.QueryContext(context.Background(), query, allArgs...)
 	if err != nil {
 		return fmt.Errorf("load dependencies: %w", err)
 	}
@@ -334,7 +335,7 @@ func (r *SQLiteReader) loadComments(ids []string, issueMap map[string]*task.Issu
 	}
 	placeholders, args := inClause(ids)
 	//nolint:gosec // G202: placeholders contains only "?" markers from inClause, not user input
-	rows, err := r.db.Query(
+	rows, err := r.db.QueryContext(context.Background(),
 		"SELECT id, issue_id, author, text, created_at FROM comments WHERE issue_id IN ("+placeholders+") ORDER BY created_at ASC",
 		args...,
 	)

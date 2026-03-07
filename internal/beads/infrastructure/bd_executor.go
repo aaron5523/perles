@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -38,7 +39,7 @@ func (e *BDExecutor) runBeads(args ...string) (string, error) {
 		return e.runFunc(args...)
 	}
 	//nolint:gosec // G204: args come from controlled sources
-	cmd := exec.Command("bd", args...)
+	cmd := exec.CommandContext(context.Background(), "bd", args...)
 	if e.workDir != "" {
 		cmd.Dir = e.workDir
 	}

@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,17 +14,17 @@ import (
 func OpenBrowser(url string) error {
 	// Check for BROWSER env var first (common on Linux)
 	if browser := os.Getenv("BROWSER"); browser != "" {
-		return exec.Command(browser, url).Start() //nolint:gosec // BROWSER is user-controlled env var
+		return exec.CommandContext(context.Background(), browser, url).Start() //nolint:gosec // BROWSER is user-controlled env var
 	}
 
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", url) //nolint:gosec // url is an internally generated localhost URL
+		cmd = exec.CommandContext(context.Background(), "open", url) //nolint:gosec // url is an internally generated localhost URL
 	case "linux":
-		cmd = exec.Command("xdg-open", url) //nolint:gosec // url is an internally generated localhost URL
+		cmd = exec.CommandContext(context.Background(), "xdg-open", url) //nolint:gosec // url is an internally generated localhost URL
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url) //nolint:gosec // url is an internally generated localhost URL
+		cmd = exec.CommandContext(context.Background(), "cmd", "/c", "start", url) //nolint:gosec // url is an internally generated localhost URL
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}

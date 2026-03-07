@@ -3,6 +3,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -65,28 +66,28 @@ func NewDB(path string) (*DB, error) {
 	}
 
 	// Verify connection
-	if err := conn.Ping(); err != nil {
+	if err := conn.PingContext(context.Background()); err != nil {
 		_ = conn.Close()
 		log.ErrorErr(log.CatDB, "Failed to ping database", err, "path", path)
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	// Configure WAL mode for better concurrent access
-	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	if _, err := conn.ExecContext(context.Background(), "PRAGMA journal_mode=WAL"); err != nil {
 		_ = conn.Close()
 		log.ErrorErr(log.CatDB, "Failed to enable WAL mode", err)
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
 	// Enable foreign key constraints
-	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
+	if _, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys=ON"); err != nil {
 		_ = conn.Close()
 		log.ErrorErr(log.CatDB, "Failed to enable foreign keys", err)
 		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	// Set busy timeout to 5000ms for better concurrency handling
-	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	if _, err := conn.ExecContext(context.Background(), "PRAGMA busy_timeout=5000"); err != nil {
 		_ = conn.Close()
 		log.ErrorErr(log.CatDB, "Failed to set busy timeout", err)
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)

@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
@@ -70,7 +71,7 @@ func (b *Builder) Build() {
 
 func (b *Builder) insertIssue(issue issueData) {
 	b.t.Helper()
-	_, err := b.db.Exec(
+	_, err := b.db.ExecContext(context.Background(),
 		`INSERT INTO issues (id, title, description, status, priority, issue_type, assignee, sender, ephemeral, pinned, is_template, created_at, created_by, updated_at, closed_at, close_reason, deleted_at, hook_bead, role_bead, agent_state, last_activity, role_type, rig, mol_type)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		issue.id, issue.title, issue.description, issue.status, issue.priority,
@@ -83,7 +84,7 @@ func (b *Builder) insertIssue(issue issueData) {
 func (b *Builder) insertLabels(issueID string, labels []string) {
 	b.t.Helper()
 	for _, label := range labels {
-		_, err := b.db.Exec(`INSERT INTO labels (issue_id, label) VALUES (?, ?)`, issueID, label)
+		_, err := b.db.ExecContext(context.Background(), `INSERT INTO labels (issue_id, label) VALUES (?, ?)`, issueID, label)
 		require.NoError(b.t, err)
 	}
 }
@@ -91,7 +92,7 @@ func (b *Builder) insertLabels(issueID string, labels []string) {
 func (b *Builder) insertComments(issueID string, comments []CommentData) {
 	b.t.Helper()
 	for _, c := range comments {
-		_, err := b.db.Exec(
+		_, err := b.db.ExecContext(context.Background(),
 			`INSERT INTO comments (issue_id, author, text) VALUES (?, ?, ?)`,
 			issueID, c.Author, c.Text,
 		)
@@ -101,7 +102,7 @@ func (b *Builder) insertComments(issueID string, comments []CommentData) {
 
 func (b *Builder) insertDependency(dep depData) {
 	b.t.Helper()
-	_, err := b.db.Exec(
+	_, err := b.db.ExecContext(context.Background(),
 		`INSERT INTO dependencies (issue_id, depends_on_id, type) VALUES (?, ?, ?)`,
 		dep.issueID, dep.dependsOnID, dep.depType,
 	)
@@ -110,6 +111,6 @@ func (b *Builder) insertDependency(dep depData) {
 
 func (b *Builder) insertBlockedCache(issueID string) {
 	b.t.Helper()
-	_, err := b.db.Exec(`INSERT INTO blocked_issues_cache (issue_id) VALUES (?)`, issueID)
+	_, err := b.db.ExecContext(context.Background(), `INSERT INTO blocked_issues_cache (issue_id) VALUES (?)`, issueID)
 	require.NoError(b.t, err)
 }
