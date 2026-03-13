@@ -1,0 +1,56 @@
+[project]
+site_name = "Perles"
+site_url = "https://zjrosen.github.io/perles/"
+site_description = "Terminal-based search and kanban board for beads issue tracking with multi-agent AI orchestration"
+site_author = "Zack Rosen"
+copyright = "&copy; 2026 Zack Rosen"
+docs_dir = "docs"
+repo_url = "https://github.com/zjrosen/perles"
+repo_name = "zjrosen/perles"
+edit_uri = "edit/main/docs/"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting Started" = "getting-started.md" },
+  { "Usage" = [
+    "usage/index.md",
+    "usage/kanban.md",
+    "usage/search.md",
+    "usage/dependency-explorer.md",
+  ] },
+  { "BQL Reference" = [
+    "bql/index.md",
+  ] },
+  { "Configuration" = [
+    "configuration/index.md",
+    "configuration/theming.md",
+  ] },
+  { "Orchestration" = [
+    "orchestration/index.md",
+    "orchestration/workflows.md",
+    "orchestration/custom-workflows.md",
+  ] },
+]
+
+[project.theme]
+features = [
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.indexes",
+  "navigation.top",
+  "navigation.path",
+  "toc.follow",
+  "search.suggest",
+  "search.highlight",
+  "content.action.edit",
+  "content.action.view",
+  "content.code.copy",
+]
+
+[project.theme.palette]
+scheme = "slate"
+primary = "indigo"
+accent = "indigo"
+
+[project.theme.icon]
+repo = "fontawesome/brands/github"

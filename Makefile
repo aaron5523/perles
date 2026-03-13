@@ -1,4 +1,4 @@
-.PHONY: all build build-go build-frontend run run-all install test test-v test-update clean lint mocks mocks-clean playground up down jaeger daemon
+.PHONY: all build build-go build-frontend run run-all install test test-v test-update clean lint mocks mocks-clean playground up down jaeger daemon docs index-docs
 
 # Version from git (tag or commit hash)
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -108,3 +108,10 @@ down:
 # Open Jaeger UI in browser
 jaeger:
 	open http://localhost:16686
+
+docs:
+	zensical serve -a 127.0.0.1:8001
+
+index-docs:
+	qmd --index perles update
+	qmd --index perles embed

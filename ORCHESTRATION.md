@@ -11,7 +11,7 @@ This allows for structured workflow instructions that can manage and orchestrate
 - **Workers** Multiple headless agents who execute specific sub-tasks (coding, testing, reviewing, documenting)
 
 <p align="center">
-  <img src="./assets/control-plane.png" width="1440" alt="search">
+  <img src="./docs/assets/control-plane.png" width="1440" alt="search">
 </p>
 
 ---
@@ -51,7 +51,7 @@ Any workflow supports doing work inside a git worktree. When using a worktree yo
 Worktree's are primarily meant for when you are running multiple "Cook" workflows on different epics in parallel.
  
 <p align="center">
-  <img src="./assets/new-workflow.png" width="1440" alt="search">
+  <img src="./docs/assets/new-workflow.png" width="1440" alt="search">
 </p>
 
 ---
