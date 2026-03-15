@@ -25,7 +25,7 @@ func TestErrorReason_Constants(t *testing.T) {
 
 func TestErrorInfo_IsContextExceeded_ReturnsTrue(t *testing.T) {
 	err := &ErrorInfo{
-		Message: "Prompt is too long: 201234 tokens > 200000 maximum",
+		Message: "Prompt is too long: 1001234 tokens > 1000000 maximum",
 		Code:    "PROMPT_TOO_LONG",
 		Reason:  ErrReasonContextExceeded,
 	}

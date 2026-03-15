@@ -23,32 +23,32 @@ func TestContextUsage(t *testing.T) {
 		{
 			name:        "zero tokens returns zero",
 			tokensUsed:  0,
-			totalTokens: 200000,
+			totalTokens: 1000000,
 			want:        0,
 		},
 		{
 			name:        "50% usage",
-			tokensUsed:  100000,
-			totalTokens: 200000,
+			tokensUsed:  500000,
+			totalTokens: 1000000,
 			want:        50,
 		},
 		{
 			name:        "85% usage (critical threshold)",
-			tokensUsed:  170000,
-			totalTokens: 200000,
+			tokensUsed:  850000,
+			totalTokens: 1000000,
 			want:        85,
 		},
 		{
 			name:        "70% usage (warning threshold)",
-			tokensUsed:  140000,
-			totalTokens: 200000,
+			tokensUsed:  700000,
+			totalTokens: 1000000,
 			want:        70,
 		},
 		{
-			name:        "27k/200k typical usage",
+			name:        "27k/1000k typical usage",
 			tokensUsed:  27000,
-			totalTokens: 200000,
-			want:        13.5,
+			totalTokens: 1000000,
+			want:        2.7,
 		},
 	}
 
@@ -78,22 +78,22 @@ func TestFormatContextDisplay(t *testing.T) {
 			want:        "-",
 		},
 		{
-			name:        "typical 27k/200k",
+			name:        "typical 27k/1000k",
 			tokensUsed:  27000,
-			totalTokens: 200000,
-			want:        "27k/200k",
+			totalTokens: 1000000,
+			want:        "27k/1000k",
 		},
 		{
-			name:        "45k/200k",
+			name:        "45k/1000k",
 			tokensUsed:  45000,
-			totalTokens: 200000,
-			want:        "45k/200k",
+			totalTokens: 1000000,
+			want:        "45k/1000k",
 		},
 		{
 			name:        "small numbers round down",
 			tokensUsed:  500,
-			totalTokens: 200000,
-			want:        "0k/200k",
+			totalTokens: 1000000,
+			want:        "0k/1000k",
 		},
 		{
 			name:        "100k context window",
@@ -159,7 +159,7 @@ func TestTokenMetrics_FullStruct(t *testing.T) {
 	now := time.Now()
 	m := TokenMetrics{
 		TokensUsed:    27000,
-		TotalTokens:   200000,
+		TotalTokens:   1000000,
 		OutputTokens:  1000,
 		TurnCostUSD:   0.0150,
 		TotalCostUSD:  0.0892,
@@ -167,8 +167,8 @@ func TestTokenMetrics_FullStruct(t *testing.T) {
 	}
 
 	// Verify all calculations
-	require.Equal(t, 13.5, m.ContextUsage(), "ContextUsage()")
-	require.Equal(t, "27k/200k", m.FormatContextDisplay(), "FormatContextDisplay()")
+	require.Equal(t, 2.7, m.ContextUsage(), "ContextUsage()")
+	require.Equal(t, "27k/1000k", m.FormatContextDisplay(), "FormatContextDisplay()")
 	require.Equal(t, "$0.0892", m.FormatCostDisplay(), "FormatCostDisplay()")
 	require.Equal(t, now, m.LastUpdatedAt, "LastUpdatedAt")
 }

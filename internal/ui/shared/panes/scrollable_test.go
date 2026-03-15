@@ -144,7 +144,7 @@ func TestScrollablePane_MetricsDisplayInRightTitle(t *testing.T) {
 
 	cfg := ScrollableConfig{
 		Viewport:       &vp,
-		MetricsDisplay: "27k/200k",
+		MetricsDisplay: "27k/1000k",
 		LeftTitle:      "Metrics",
 		TitleColor:     scrollTestColorBlue,
 		BorderColor:    scrollTestColorBlue,
@@ -155,7 +155,7 @@ func TestScrollablePane_MetricsDisplayInRightTitle(t *testing.T) {
 	})
 
 	// Should contain the metrics display
-	require.Contains(t, result, "27k/200k", "missing metrics display")
+	require.Contains(t, result, "27k/1000k", "missing metrics display")
 }
 
 func TestScrollablePane_ContentPaddingPushesToBottom(t *testing.T) {

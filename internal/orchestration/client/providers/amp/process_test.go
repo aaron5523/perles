@@ -671,7 +671,7 @@ func TestParseEvent(t *testing.T) {
 		},
 		{
 			name: "result error event - prompt too long",
-			json: `{"type":"result","subtype":"error","is_error":true,"result":"Prompt is too long: 201234 tokens > 200000 maximum"}`,
+			json: `{"type":"result","subtype":"error","is_error":true,"result":"Prompt is too long: 1001234 tokens > 1000000 maximum"}`,
 			validate: func(t *testing.T, e client.OutputEvent) {
 				require.Equal(t, client.EventResult, e.Type)
 				require.True(t, e.IsErrorResult)
@@ -711,7 +711,7 @@ func TestParseEvent(t *testing.T) {
 				// TokensUsed = input + cache_read + cache_creation = 100 + 1000 + 500 = 1600
 				require.Equal(t, 1600, e.Usage.TokensUsed)
 				require.Equal(t, 50, e.Usage.OutputTokens)
-				require.Equal(t, 200000, e.Usage.TotalTokens) // Default context window
+				require.Equal(t, 1000000, e.Usage.TotalTokens) // Default context window
 			},
 		},
 	}
@@ -866,7 +866,7 @@ func TestParser_IsContextExhausted_Patterns(t *testing.T) {
 	}{
 		// Should detect context exceeded
 		{"Prompt is too long", true},
-		{"Prompt is too long: 201234 tokens > 200000 maximum", true},
+		{"Prompt is too long: 1001234 tokens > 1000000 maximum", true},
 		{"Context window exceeded", true},
 		{"context exceeded", true},
 		{"The context limit has been reached", true},

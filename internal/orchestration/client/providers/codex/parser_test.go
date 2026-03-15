@@ -16,7 +16,7 @@ func TestNewParser(t *testing.T) {
 
 func TestParser_ContextWindowSize(t *testing.T) {
 	p := NewParser()
-	require.Equal(t, 200000, p.ContextWindowSize())
+	require.Equal(t, 1000000, p.ContextWindowSize())
 }
 
 func TestParser_ParseEvent_ThreadStarted(t *testing.T) {
@@ -231,7 +231,7 @@ func TestParser_IsContextExhausted_MessagePatterns(t *testing.T) {
 		"Context window exceeded",
 		"The context exceeded the limit",
 		"Token limit exceeded",
-		"Maximum context length is 200000",
+		"Maximum context length is 1000000",
 	}
 
 	for _, pattern := range patterns {

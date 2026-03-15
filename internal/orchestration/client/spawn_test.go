@@ -53,7 +53,7 @@ type mockParser struct {
 
 func newMockParser() *mockParser {
 	return &mockParser{
-		BaseParser: NewBaseParser(200000),
+		BaseParser: NewBaseParser(1000000),
 	}
 }
 

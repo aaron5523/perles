@@ -42,7 +42,7 @@ type ScrollableConfig struct {
 	// Displayed as "↓New" indicator in the right title.
 	HasNewContent bool
 
-	// MetricsDisplay is optional metrics text (e.g., "27k/200k" for context).
+	// MetricsDisplay is optional metrics text (e.g., "27k/1000k" for context).
 	// Displayed in the right title.
 	MetricsDisplay string
 
@@ -198,7 +198,7 @@ func buildRightTitle(vp viewport.Model, hasNewContent bool, rightTitle, metricsD
 		parts = append(parts, rightTitle)
 	}
 
-	// Add metrics display if available (e.g., "27k/200k" for context usage)
+	// Add metrics display if available (e.g., "27k/1000k" for context usage)
 	if metricsDisplay != "" {
 		parts = append(parts, ScrollIndicatorStyle.Render(metricsDisplay))
 	}

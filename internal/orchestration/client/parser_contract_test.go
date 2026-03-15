@@ -113,12 +113,12 @@ func TestAllParsers_Contract_ContextExhaustedReason(t *testing.T) {
 // detect context exhaustion via message pattern matching (the 6 known patterns).
 func TestAllParsers_Contract_ContextExhaustedMessagePatterns(t *testing.T) {
 	patterns := []string{
-		"Prompt is too long: 250000 tokens > 200000 maximum",
+		"Prompt is too long: 1050000 tokens > 1000000 maximum",
 		"Context window exceeded",
 		"The context exceeded the limit",
 		"The context limit has been reached",
 		"Token limit exceeded",
-		"This model's maximum context length is 200000 tokens",
+		"This model's maximum context length is 1000000 tokens",
 	}
 
 	for _, tc := range allParsers() {

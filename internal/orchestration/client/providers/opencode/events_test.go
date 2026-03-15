@@ -77,7 +77,7 @@ func TestParseEvent_StepFinishWithTokens(t *testing.T) {
 	// TokensUsed = input(20923) + cacheRead(467) = 21390
 	require.Equal(t, 21390, event.Usage.TokensUsed)
 	require.Equal(t, 154, event.Usage.OutputTokens)
-	require.Equal(t, 200000, event.Usage.TotalTokens) // Claude context window
+	require.Equal(t, 1000000, event.Usage.TotalTokens) // Claude context window
 }
 
 func TestParseEvent_StepFinishStopReason(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	// ClaudeContextWindowSize is the context window size for Claude models (Opus 4.5).
+	// ClaudeContextWindowSize is the context window size for Claude models.
 	// TODO: This should be configurable per model.
-	ClaudeContextWindowSize = 200000
+	ClaudeContextWindowSize = 1000000
 )
 
 // Parser implements client.EventParser for Claude CLI JSON events.

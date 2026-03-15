@@ -10,9 +10,9 @@ import (
 const (
 	// CursorContextWindowSize is the assumed context window size for Cursor Agent.
 	// Cursor supports multiple model providers with varying context windows;
-	// 200000 is a conservative default. Cursor CLI does not report the actual
+	// 1000000 is a conservative default. Cursor CLI does not report the actual
 	// context window size, so this value is used for usage percentage estimates.
-	CursorContextWindowSize = 200000
+	CursorContextWindowSize = 1000000
 
 	// eventThinking is the Cursor-specific event type for model reasoning/thinking.
 	// These events have subtypes "delta" (streaming chunks) and "completed".

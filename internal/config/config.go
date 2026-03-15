@@ -215,7 +215,7 @@ type ClaudeClientConfig struct {
 
 // CodexClientConfig holds Claude-specific settings.
 type CodexClientConfig struct {
-	Model string `mapstructure:"model"` // gpt-5.2-codex (default), o4-mini
+	Model string `mapstructure:"model"` // gpt-5.4 (default), o4-mini
 }
 
 // AmpClientConfig holds Amp-specific settings.
@@ -231,7 +231,7 @@ type GeminiClientConfig struct {
 
 // OpenCodeClientConfig holds OpenCode-specific settings.
 type OpenCodeClientConfig struct {
-	Model string `mapstructure:"model"` // anthropic/claude-opus-4-5 (default)
+	Model string `mapstructure:"model"` // anthropic/claude-opus-4-6 (default)
 }
 
 // CursorClientConfig holds Cursor-specific settings.
@@ -1004,14 +1004,14 @@ func Defaults() Config {
 			CoordinatorClient: "claude",
 			WorkerClient:      "claude",
 			Claude: ClaudeClientConfig{
-				Model: "claude-opus-4-5",
+				Model: "claude-opus-4-6",
 			},
 			Amp: AmpClientConfig{
 				Model: "opus",
 				Mode:  "smart",
 			},
 			Codex: CodexClientConfig{
-				Model: "gpt-5.2-codex",
+				Model: "gpt-5.4",
 			},
 			Gemini: GeminiClientConfig{
 				Model: "gemini-3-pro-preview",
@@ -1145,7 +1145,7 @@ orchestration:
 
   # Codex-specific settings (only used when client: codex)
   codex:
-    model: gpt-5.2-codex  # gpt-5.2-codex (default)
+    model: gpt-5.4  # gpt-5.4 (default)
 
   # Amp-specific settings (only used when client: amp)
   amp:
@@ -1154,7 +1154,7 @@ orchestration:
 
   # OpenCode-specific settings (only used when client: opencode)
   opencode:
-    model: anthropic/claude-opus-4-5  # anthropic/claude-opus-4-5 (default)
+    model: anthropic/claude-opus-4-6  # anthropic/claude-opus-4-6 (default)
 
   # Cursor-specific settings (only used when client: cursor)
   # cursor:

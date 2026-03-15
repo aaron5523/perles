@@ -261,7 +261,7 @@ func (p *Process) SendResultEvent(tokensUsed, outputTokens int, costUSD float64)
 		Timestamp: time.Now(),
 		Usage: &client.UsageInfo{
 			TokensUsed:   tokensUsed,
-			TotalTokens:  200000,
+			TotalTokens:  1000000,
 			OutputTokens: outputTokens,
 		},
 		TotalCostUSD: costUSD,

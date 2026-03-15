@@ -9,7 +9,7 @@ import (
 
 const (
 	// OpenCodeContextWindowSize is the context window size for OpenCode (uses Claude models).
-	OpenCodeContextWindowSize = 200000
+	OpenCodeContextWindowSize = 1000000
 )
 
 // Parser implements client.EventParser for OpenCode CLI JSON events.

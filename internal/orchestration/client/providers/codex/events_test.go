@@ -111,7 +111,7 @@ func TestParseEvent_TurnCompleted(t *testing.T) {
 
 	// Verify token usage (TokensUsed = input_tokens + cached_input_tokens)
 	require.Equal(t, 24763+24448, event.Usage.TokensUsed) // input + cached
-	require.Equal(t, 200000, event.Usage.TotalTokens)     // default context window
+	require.Equal(t, 1000000, event.Usage.TotalTokens)    // default context window
 	require.Equal(t, 122, event.Usage.OutputTokens)
 }
 

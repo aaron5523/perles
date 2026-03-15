@@ -116,15 +116,15 @@ func (c *Config) ClaudeEnv() map[string]string {
 	return nil
 }
 
-// CodexModel returns the Codex model from Extensions, or "gpt-5.2-codex" as default.
+// CodexModel returns the Codex model from Extensions, or "gpt-5.4" as default.
 func (c *Config) CodexModel() string {
 	if c.Extensions == nil {
-		return "gpt-5.2-codex"
+		return "gpt-5.4"
 	}
 	if v, ok := c.Extensions[ExtCodexModel].(string); ok && v != "" {
 		return v
 	}
-	return "gpt-5.2-codex"
+	return "gpt-5.4"
 }
 
 // GeminiModel returns the Gemini model from Extensions, or "gemini-3-pro-preview" as default.
@@ -151,16 +151,16 @@ func (c *Config) AmpModel() string {
 	return "opus"
 }
 
-// OpenCodeModel returns the OpenCode model from Extensions, or "anthropic/claude-opus-4-5" as default.
+// OpenCodeModel returns the OpenCode model from Extensions, or "anthropic/claude-opus-4-6" as default.
 func (c *Config) OpenCodeModel() string {
 	if c.Extensions == nil {
-		return "anthropic/claude-opus-4-5"
+		return "anthropic/claude-opus-4-6"
 	}
 	if v, ok := c.Extensions[ExtOpenCodeModel].(string); ok && v != "" {
 		return v
 	}
 
-	return "anthropic/claude-opus-4-5"
+	return "anthropic/claude-opus-4-6"
 }
 
 // CursorModel returns the Cursor model from Extensions, or "" as default (uses Cursor's default).

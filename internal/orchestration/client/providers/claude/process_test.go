@@ -280,12 +280,12 @@ func TestOutputEventParsing(t *testing.T) {
 				require.NotNil(t, e.Usage)
 				require.Equal(t, 17000, e.Usage.TokensUsed)
 				require.Equal(t, 1500, e.Usage.OutputTokens)
-				require.Equal(t, 200000, e.Usage.TotalTokens)
+				require.Equal(t, 1000000, e.Usage.TotalTokens)
 			},
 		},
 		{
 			name: "result with model usage",
-			json: `{"type":"result","subtype":"success","modelUsage":{"claude-sonnet-4":{"inputTokens":1000,"outputTokens":500,"contextWindow":200000,"costUSD":0.05}}}`,
+			json: `{"type":"result","subtype":"success","modelUsage":{"claude-sonnet-4":{"inputTokens":1000,"outputTokens":500,"contextWindow":1000000,"costUSD":0.05}}}`,
 			validate: func(t *testing.T, e client.OutputEvent) {
 				require.True(t, e.IsResult())
 				require.NotNil(t, e.ModelUsage)
@@ -293,7 +293,7 @@ func TestOutputEventParsing(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, 1000, usage.InputTokens)
 				require.Equal(t, 500, usage.OutputTokens)
-				require.Equal(t, 200000, usage.ContextWindow)
+				require.Equal(t, 1000000, usage.ContextWindow)
 				require.InDelta(t, 0.05, usage.CostUSD, 0.001)
 			},
 		},
@@ -819,14 +819,14 @@ func TestMainModelTokenCalculation(t *testing.T) {
 				"subtype":"success",
 				"usage":{"input_tokens":2,"output_tokens":10,"cache_read_input_tokens":21927,"cache_creation_input_tokens":0},
 				"modelUsage":{
-					"claude-opus-4-5-20251101":{"inputTokens":4,"outputTokens":30,"cacheReadInputTokens":26053,"cacheCreationInputTokens":0,"contextWindow":200000}
+					"claude-opus-4-5-20251101":{"inputTokens":4,"outputTokens":30,"cacheReadInputTokens":26053,"cacheCreationInputTokens":0,"contextWindow":1000000}
 				},
 				"total_cost_usd":0.0137
 			}`,
 			expectedMainModel:    "claude-opus-4-5-20251101",
 			expectedTokensUsed:   4 + 26053 + 0, // input + cacheRead + cacheCreation
 			expectedOutputTokens: 30,
-			expectedTotalTokens:  200000,
+			expectedTotalTokens:  1000000,
 		},
 		{
 			name:     "with sub-agent - should use main model metrics",
@@ -836,15 +836,15 @@ func TestMainModelTokenCalculation(t *testing.T) {
 				"subtype":"success",
 				"usage":{"input_tokens":2,"output_tokens":158,"cache_read_input_tokens":34599,"cache_creation_input_tokens":9441},
 				"modelUsage":{
-					"claude-opus-4-5-20251101":{"inputTokens":4,"outputTokens":177,"cacheReadInputTokens":34599,"cacheCreationInputTokens":13567,"contextWindow":200000,"costUSD":0.1065},
-					"claude-haiku-4-5-20251001":{"inputTokens":4002,"outputTokens":339,"cacheReadInputTokens":0,"cacheCreationInputTokens":14563,"contextWindow":200000,"costUSD":0.0239}
+					"claude-opus-4-5-20251101":{"inputTokens":4,"outputTokens":177,"cacheReadInputTokens":34599,"cacheCreationInputTokens":13567,"contextWindow":1000000,"costUSD":0.1065},
+					"claude-haiku-4-5-20251001":{"inputTokens":4002,"outputTokens":339,"cacheReadInputTokens":0,"cacheCreationInputTokens":14563,"contextWindow":1000000,"costUSD":0.0239}
 				},
 				"total_cost_usd":0.1304
 			}`,
 			expectedMainModel:    "claude-opus-4-5-20251101",
 			expectedTokensUsed:   4 + 34599 + 13567, // Main model's input + cacheRead + cacheCreation
 			expectedOutputTokens: 177,               // Main model's output, not haiku's
-			expectedTotalTokens:  200000,
+			expectedTotalTokens:  1000000,
 		},
 	}
 
@@ -872,7 +872,7 @@ func TestMainModelTokenCalculation(t *testing.T) {
 					tokensUsed := mainUsage.InputTokens + mainUsage.CacheReadInputTokens + mainUsage.CacheCreationInputTokens
 					totalTokens := mainUsage.ContextWindow
 					if totalTokens == 0 {
-						totalTokens = 200000
+						totalTokens = 1000000
 					}
 					resultEvent.Usage = &client.UsageInfo{
 						TokensUsed:   tokensUsed,

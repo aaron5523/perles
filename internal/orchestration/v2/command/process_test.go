@@ -280,7 +280,7 @@ func TestProcessTurnCompleteCommand_StoresMetrics(t *testing.T) {
 		TokensUsed:   1000,
 		OutputTokens: 500,
 		TotalCostUSD: 0.05,
-		TotalTokens:  200000,
+		TotalTokens:  1000000,
 	}
 	cmd := NewProcessTurnCompleteCommand("worker-1", true, m, nil)
 	require.NotNil(t, cmd.Metrics)

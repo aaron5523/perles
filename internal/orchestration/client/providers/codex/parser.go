@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	// CodexContextWindowSize is the context window size for Codex (200000 tokens).
+	// CodexContextWindowSize is the context window size for Codex (1000000 tokens).
 	// TODO: This should be configurable per model.
-	CodexContextWindowSize = 200000
+	CodexContextWindowSize = 1000000
 )
 
 // Parser implements client.EventParser for Codex CLI JSON events.

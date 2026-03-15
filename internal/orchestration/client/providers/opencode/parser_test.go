@@ -16,7 +16,7 @@ func TestParser_NewParser(t *testing.T) {
 func TestParser_ContextWindowSize(t *testing.T) {
 	p := NewParser()
 	size := p.ContextWindowSize()
-	require.Equal(t, 200000, size, "ContextWindowSize should return 200000 for OpenCode")
+	require.Equal(t, 1000000, size, "ContextWindowSize should return 1000000 for OpenCode")
 }
 
 func TestParser_ParseEvent_AssistantMessage(t *testing.T) {
@@ -104,8 +104,8 @@ func TestParser_ParseEvent_NestedAPIError(t *testing.T) {
 	p := NewParser()
 
 	// Nested API error format from real OpenCode context exceeded error
-	// {"type":"error","error":{"name":"APIError","data":{"message":"prompt is too long: 200561 tokens > 200000 maximum",...}}}
-	input := `{"type":"error","timestamp":1768711215455,"sessionID":"ses_test123","error":{"name":"APIError","data":{"message":"prompt is too long: 200561 tokens > 200000 maximum","statusCode":400,"isRetryable":false}}}`
+	// {"type":"error","error":{"name":"APIError","data":{"message":"prompt is too long: 1000561 tokens > 1000000 maximum",...}}}
+	input := `{"type":"error","timestamp":1768711215455,"sessionID":"ses_test123","error":{"name":"APIError","data":{"message":"prompt is too long: 1000561 tokens > 1000000 maximum","statusCode":400,"isRetryable":false}}}`
 
 	event, err := p.ParseEvent([]byte(input))
 
@@ -113,7 +113,7 @@ func TestParser_ParseEvent_NestedAPIError(t *testing.T) {
 	require.Equal(t, client.EventError, event.Type)
 	require.Equal(t, "ses_test123", event.SessionID)
 	require.NotNil(t, event.Error)
-	require.Equal(t, "prompt is too long: 200561 tokens > 200000 maximum", event.Error.Message)
+	require.Equal(t, "prompt is too long: 1000561 tokens > 1000000 maximum", event.Error.Message)
 	require.Equal(t, "APIError", event.Error.Code)
 	// Should detect as context exhausted
 	require.Equal(t, client.ErrReasonContextExceeded, event.Error.Reason)
@@ -148,7 +148,7 @@ func TestParser_ParseEvent_StepFinishWithTokens(t *testing.T) {
 	require.Equal(t, "tool-calls", event.SubType)
 	require.NotNil(t, event.Usage)
 	require.Equal(t, 7000, event.Usage.TokensUsed) // input + cache.read
-	require.Equal(t, 200000, event.Usage.TotalTokens)
+	require.Equal(t, 1000000, event.Usage.TotalTokens)
 	require.Equal(t, 1000, event.Usage.OutputTokens)
 }
 
@@ -297,7 +297,7 @@ func TestParser_ParseEvent_ContextExhausted(t *testing.T) {
 	p := NewParser()
 
 	// Error event with context exhaustion pattern should set ErrReasonContextExceeded
-	input := `{"type":"error","error":{"message":"Prompt is too long: 250000 tokens exceeds 200000 maximum"}}`
+	input := `{"type":"error","error":{"message":"Prompt is too long: 1050000 tokens exceeds 1000000 maximum"}}`
 
 	event, err := p.ParseEvent([]byte(input))
 

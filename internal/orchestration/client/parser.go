@@ -28,7 +28,7 @@ type EventParser interface {
 	IsContextExhausted(event OutputEvent) bool
 
 	// ContextWindowSize returns the provider's context window size in tokens.
-	// Replaces hardcoded values like 200000 (Claude/Amp) and 1000000 (Gemini).
+	// Replaces hardcoded values like 1000000 (Claude/Amp/Gemini).
 	ContextWindowSize() int
 }
 

@@ -20,7 +20,7 @@ func TestNewParser(t *testing.T) {
 
 func TestParser_ContextWindowSize(t *testing.T) {
 	p := NewParser()
-	require.Equal(t, 200000, p.ContextWindowSize())
+	require.Equal(t, 1000000, p.ContextWindowSize())
 }
 
 func TestParser_ParseEvent_MessageStart(t *testing.T) {
@@ -84,7 +84,7 @@ func TestParser_ParseEvent_ErrorContextExhaustion(t *testing.T) {
 	p := NewParser()
 
 	// Error with context exhaustion pattern
-	input := `{"type":"error","error":{"message":"Prompt is too long: 250000 tokens > 200000 maximum","code":"invalid_request"}}`
+	input := `{"type":"error","error":{"message":"Prompt is too long: 1050000 tokens > 1000000 maximum","code":"invalid_request"}}`
 	event, err := p.ParseEvent([]byte(input))
 
 	require.NoError(t, err)

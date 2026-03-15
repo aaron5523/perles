@@ -202,7 +202,7 @@ func TestFormatMetricsDisplay_Nil(t *testing.T) {
 func TestFormatMetricsDisplay_ZeroTokens(t *testing.T) {
 	m := &metrics.TokenMetrics{
 		TokensUsed:  0,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	result := FormatMetricsDisplay(m)
 	require.Empty(t, result, "zero tokens should return empty string")
@@ -212,7 +212,7 @@ func TestFormatMetricsDisplay_ZeroTokens(t *testing.T) {
 func TestFormatMetricsDisplay_NegativeTokens(t *testing.T) {
 	m := &metrics.TokenMetrics{
 		TokensUsed:  -100,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	result := FormatMetricsDisplay(m)
 	require.Empty(t, result, "negative tokens should return empty string")
@@ -222,24 +222,24 @@ func TestFormatMetricsDisplay_NegativeTokens(t *testing.T) {
 func TestFormatMetricsDisplay_WithTokens(t *testing.T) {
 	m := &metrics.TokenMetrics{
 		TokensUsed:  27000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	result := FormatMetricsDisplay(m)
 	require.NotEmpty(t, result, "valid metrics should return non-empty string")
-	// FormatContextDisplay returns "27k/200k" format
-	require.Equal(t, "27k/200k", result, "should format as 27k/200k")
+	// FormatContextDisplay returns "27k/1000k" format
+	require.Equal(t, "27k/1000k", result, "should format as 27k/1000k")
 }
 
 // TestFormatMetricsDisplay_SmallTokens verifies small token values are formatted correctly.
 func TestFormatMetricsDisplay_SmallTokens(t *testing.T) {
 	m := &metrics.TokenMetrics{
 		TokensUsed:  500,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	result := FormatMetricsDisplay(m)
 	require.NotEmpty(t, result, "small positive tokens should return non-empty string")
-	// 500 / 1000 = 0 (integer division), so it shows "0k/200k"
-	require.Equal(t, "0k/200k", result, "should format small tokens correctly")
+	// 500 / 1000 = 0 (integer division), so it shows "0k/1000k"
+	require.Equal(t, "0k/1000k", result, "should format small tokens correctly")
 }
 
 // TestExportedBorderColors verifies exported border color constants are set correctly.

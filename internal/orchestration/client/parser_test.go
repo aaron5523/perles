@@ -14,11 +14,6 @@ func TestNewBaseParser(t *testing.T) {
 		expectedWindow int
 	}{
 		{
-			name:           "sets context window correctly - 200000",
-			contextWindow:  200000,
-			expectedWindow: 200000,
-		},
-		{
 			name:           "sets context window correctly - 1000000",
 			contextWindow:  1000000,
 			expectedWindow: 1000000,
@@ -46,7 +41,7 @@ func TestBaseParser_ContextWindowSize(t *testing.T) {
 }
 
 func TestBaseParser_IsContextExhausted_NilError(t *testing.T) {
-	parser := NewBaseParser(200000)
+	parser := NewBaseParser(1000000)
 
 	// Event with nil error should return false
 	event := OutputEvent{
@@ -57,7 +52,7 @@ func TestBaseParser_IsContextExhausted_NilError(t *testing.T) {
 }
 
 func TestBaseParser_IsContextExhausted_ErrReasonContextExceeded(t *testing.T) {
-	parser := NewBaseParser(200000)
+	parser := NewBaseParser(1000000)
 
 	// Event with ErrReasonContextExceeded should return true
 	event := OutputEvent{
@@ -71,7 +66,7 @@ func TestBaseParser_IsContextExhausted_ErrReasonContextExceeded(t *testing.T) {
 }
 
 func TestBaseParser_IsContextExhausted_MessagePatterns(t *testing.T) {
-	parser := NewBaseParser(200000)
+	parser := NewBaseParser(1000000)
 
 	tests := []struct {
 		name     string
@@ -81,7 +76,7 @@ func TestBaseParser_IsContextExhausted_MessagePatterns(t *testing.T) {
 		// All 6 patterns should be detected
 		{
 			name:     "pattern: prompt is too long",
-			message:  "Prompt is too long: 201234 tokens > 200000 maximum",
+			message:  "Prompt is too long: 201234 tokens > 1000000 maximum",
 			expected: true,
 		},
 		{
@@ -106,7 +101,7 @@ func TestBaseParser_IsContextExhausted_MessagePatterns(t *testing.T) {
 		},
 		{
 			name:     "pattern: maximum context length",
-			message:  "This model's maximum context length is 200000 tokens",
+			message:  "This model's maximum context length is 1000000 tokens",
 			expected: true,
 		},
 		// Case insensitivity tests
@@ -169,7 +164,7 @@ func TestBaseParser_IsContextExhausted_MessagePatterns(t *testing.T) {
 }
 
 func TestBaseParser_IsContextExhausted_ErrorResultWithContextMessage(t *testing.T) {
-	parser := NewBaseParser(200000)
+	parser := NewBaseParser(1000000)
 
 	// Test that result events with is_error=true are also checked
 	// GetErrorMessage() falls back to Result field when Error.Message is empty
@@ -197,7 +192,7 @@ func TestIsContextExhaustedMessage(t *testing.T) {
 		{"context exceeded", true},
 		{"context limit reached", true},
 		{"token limit exceeded", true},
-		{"maximum context length is 200000", true},
+		{"maximum context length is 1000000", true},
 
 		// Case insensitivity
 		{"PROMPT IS TOO LONG", true},
@@ -335,7 +330,7 @@ func (m *mockEventParser) ExtractSessionRef(_ OutputEvent, _ []byte) string {
 func TestWithEventParser_SetsParseEventFn(t *testing.T) {
 	// Create a mock parser
 	mockParser := &mockEventParser{
-		BaseParser: NewBaseParser(200000),
+		BaseParser: NewBaseParser(1000000),
 	}
 
 	// Create a BaseProcess with WithEventParser option

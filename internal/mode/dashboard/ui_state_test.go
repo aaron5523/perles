@@ -965,7 +965,7 @@ func TestUpdateCachedUIState_ProcessTokenUsage_Coordinator(t *testing.T) {
 		Payload: events.ProcessEvent{
 			Type:    events.ProcessTokenUsage,
 			Role:    events.RoleCoordinator,
-			Metrics: &metrics.TokenMetrics{TokensUsed: 5000, TotalTokens: 200000},
+			Metrics: &metrics.TokenMetrics{TokensUsed: 5000, TotalTokens: 1000000},
 		},
 	}
 	result, _ := m.Update(tokenEvent)
@@ -975,7 +975,7 @@ func TestUpdateCachedUIState_ProcessTokenUsage_Coordinator(t *testing.T) {
 	state = m.getOrCreateUIState("wf-1")
 	require.NotNil(t, state.CoordinatorMetrics, "CoordinatorMetrics should be populated after ProcessTokenUsage event")
 	require.Equal(t, 5000, state.CoordinatorMetrics.TokensUsed)
-	require.Equal(t, 200000, state.CoordinatorMetrics.TotalTokens)
+	require.Equal(t, 1000000, state.CoordinatorMetrics.TotalTokens)
 }
 
 func TestUpdateCachedUIState_ProcessTokenUsage_Worker(t *testing.T) {
@@ -1052,7 +1052,7 @@ func TestUpdateCachedUIState_ProcessTokenUsage_NilMetrics(t *testing.T) {
 
 	// First, set some metrics
 	state := m.getOrCreateUIState("wf-1")
-	state.CoordinatorMetrics = &metrics.TokenMetrics{TokensUsed: 3000, TotalTokens: 200000}
+	state.CoordinatorMetrics = &metrics.TokenMetrics{TokensUsed: 3000, TotalTokens: 1000000}
 	state.WorkerMetrics["worker-1"] = &metrics.TokenMetrics{TokensUsed: 1000, TotalTokens: 100000}
 
 	// Simulate ProcessTokenUsage event with nil metrics for coordinator

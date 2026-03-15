@@ -1392,7 +1392,7 @@ func TestCumulativeCostAccumulation_EmittedInTokenUsageEvent(t *testing.T) {
 		Type: client.EventResult,
 		Usage: &client.UsageInfo{
 			TokensUsed:   1000,
-			TotalTokens:  200000,
+			TotalTokens:  1000000,
 			OutputTokens: 500,
 		},
 		TotalCostUSD: 0.05,
@@ -1437,7 +1437,7 @@ func TestCumulativeCostAccumulation_MultiTurnWithEvents(t *testing.T) {
 			Type: client.EventResult,
 			Usage: &client.UsageInfo{
 				TokensUsed:   1000,
-				TotalTokens:  200000,
+				TotalTokens:  1000000,
 				OutputTokens: 500,
 			},
 			TotalCostUSD: cost,
@@ -1531,7 +1531,7 @@ func TestHandleOutputEvent_DetectsContextExceededInAssistantMessage(t *testing.T
 			Role: "assistant",
 		},
 		Error: &client.ErrorInfo{
-			Message: "Prompt is too long: 201234 tokens > 200000 maximum",
+			Message: "Prompt is too long: 201234 tokens > 1000000 maximum",
 			Code:    "PROMPT_TOO_LONG",
 			Reason:  client.ErrReasonContextExceeded,
 		},
@@ -1686,7 +1686,7 @@ func TestHandleOutputEvent_DetectsContextExceededInEventError(t *testing.T) {
 	proc.events <- client.OutputEvent{
 		Type: client.EventError,
 		Error: &client.ErrorInfo{
-			Message: "prompt is too long: 200561 tokens > 200000 maximum",
+			Message: "prompt is too long: 200561 tokens > 1000000 maximum",
 			Code:    "APIError",
 			Reason:  client.ErrReasonContextExceeded,
 		},
@@ -1952,7 +1952,7 @@ func TestHandleOutputEvent_CostIgnoredForAssistant(t *testing.T) {
 		Type: client.EventAssistant,
 		Usage: &client.UsageInfo{
 			TokensUsed:   1000,
-			TotalTokens:  200000,
+			TotalTokens:  1000000,
 			OutputTokens: 500,
 		},
 		TotalCostUSD: 0.0, // Assistant events typically have zero cost
@@ -2039,7 +2039,7 @@ func TestNoDoubleAccumulation(t *testing.T) {
 			Type: client.EventResult,
 			Usage: &client.UsageInfo{
 				TokensUsed:   1000,
-				TotalTokens:  200000,
+				TotalTokens:  1000000,
 				OutputTokens: 500,
 			},
 			TotalCostUSD: cost,
@@ -2095,7 +2095,7 @@ func TestPublishTokenUsageEvent_SendsTurnCost(t *testing.T) {
 		Type: client.EventResult,
 		Usage: &client.UsageInfo{
 			TokensUsed:   1000,
-			TotalTokens:  200000,
+			TotalTokens:  1000000,
 			OutputTokens: 500,
 		},
 		TotalCostUSD: 0.05,

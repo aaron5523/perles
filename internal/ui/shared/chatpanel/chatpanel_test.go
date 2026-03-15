@@ -1468,7 +1468,7 @@ func TestModel_HandleProcessEvent_ProcessTokenUsage(t *testing.T) {
 			ProcessID: session.ProcessID,
 			Metrics: &metrics.TokenMetrics{
 				TokensUsed:  27000,
-				TotalTokens: 200000,
+				TotalTokens: 1000000,
 			},
 		},
 	}
@@ -1479,8 +1479,8 @@ func TestModel_HandleProcessEvent_ProcessTokenUsage(t *testing.T) {
 	// Verify metrics are updated (delegates to active session)
 	require.NotNil(t, m.Metrics())
 	require.Equal(t, 27000, m.Metrics().TokensUsed)
-	require.Equal(t, 200000, m.Metrics().TotalTokens)
-	require.Equal(t, "27k/200k", m.Metrics().FormatContextDisplay())
+	require.Equal(t, 1000000, m.Metrics().TotalTokens)
+	require.Equal(t, "27k/1000k", m.Metrics().FormatContextDisplay())
 	require.NotNil(t, cmd) // listener continues
 }
 
@@ -5081,7 +5081,7 @@ func TestProcessTokenUsage_UpdatesCorrectSession(t *testing.T) {
 	// Create a ProcessTokenUsage event targeting the session's process
 	testMetrics := &metrics.TokenMetrics{
 		TokensUsed:  50000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	event := pubsub.Event[any]{
 		Type: pubsub.UpdatedEvent,
@@ -5099,7 +5099,7 @@ func TestProcessTokenUsage_UpdatesCorrectSession(t *testing.T) {
 	session = m.SessionByProcessID(ChatPanelProcessID)
 	require.NotNil(t, session.Metrics, "Session Metrics should be set")
 	require.Equal(t, 50000, session.Metrics.TokensUsed)
-	require.Equal(t, 200000, session.Metrics.TotalTokens)
+	require.Equal(t, 1000000, session.Metrics.TotalTokens)
 }
 
 func TestSessionEventIsolation_EventsForSessionADontAffectSessionB(t *testing.T) {
@@ -5145,7 +5145,7 @@ func TestSessionEventIsolation_EventsForSessionADontAffectSessionB(t *testing.T)
 		Payload: events.ProcessEvent{
 			Type:      events.ProcessTokenUsage,
 			ProcessID: ChatPanelProcessID,
-			Metrics:   &metrics.TokenMetrics{TokensUsed: 10000, TotalTokens: 200000},
+			Metrics:   &metrics.TokenMetrics{TokensUsed: 10000, TotalTokens: 1000000},
 		},
 	}
 	m, _ = m.Update(eventA2)
@@ -5331,7 +5331,7 @@ func TestView_Golden_MetricsShowsTokenUsage(t *testing.T) {
 	m.sessions[DefaultSessionID].Status = events.ProcessStatusReady
 	m.sessions[DefaultSessionID].Metrics = &metrics.TokenMetrics{
 		TokensUsed:  50000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	m = m.AddMessage(chatrender.Message{Role: RoleUser, Content: "Hello"})
 	m = m.AddMessage(chatrender.Message{Role: RoleAssistant, Content: "Hi! I've used some tokens."})
@@ -5408,13 +5408,13 @@ func TestView_SessionStateUsedForMetrics(t *testing.T) {
 	m.sessions[DefaultSessionID].Status = events.ProcessStatusReady
 	m.sessions[DefaultSessionID].Metrics = &metrics.TokenMetrics{
 		TokensUsed:  75000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	m = m.AddMessage(chatrender.Message{Role: RoleUser, Content: "Test"})
 
 	view := scanView(m)
 
-	// Should show metrics from session (75k/200k or similar format)
+	// Should show metrics from session (75k/1000k or similar format)
 	require.Contains(t, view, "75", "Metrics should be derived from session.Metrics")
 }
 
@@ -5527,7 +5527,7 @@ func TestMetrics_DelegatesToActiveSession(t *testing.T) {
 	// Set session metrics
 	expectedMetrics := &metrics.TokenMetrics{
 		TokensUsed:  50000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	session.Metrics = expectedMetrics
 
@@ -5593,7 +5593,7 @@ func TestSessionIsolation_TwoSessionsDifferentStates(t *testing.T) {
 	sessionA.QueueCount = 3
 	sessionA.Metrics = &metrics.TokenMetrics{
 		TokensUsed:  50000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	m = m.AddMessage(chatrender.Message{Role: RoleUser, Content: "Session A message"})
 
@@ -5604,7 +5604,7 @@ func TestSessionIsolation_TwoSessionsDifferentStates(t *testing.T) {
 	sessionB.QueueCount = 0
 	sessionB.Metrics = &metrics.TokenMetrics{
 		TokensUsed:  10000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	// Add a message to session B (need to switch first)
 	m, ok := m.SwitchSession("session-b")
@@ -5669,7 +5669,7 @@ func TestSessionIsolation_StateNotLeakedOnSwitch(t *testing.T) {
 	sessionA := m.ActiveSession()
 	sessionA.Status = events.ProcessStatusWorking
 	sessionA.QueueCount = 5
-	sessionA.Metrics = &metrics.TokenMetrics{TokensUsed: 75000, TotalTokens: 200000}
+	sessionA.Metrics = &metrics.TokenMetrics{TokensUsed: 75000, TotalTokens: 1000000}
 
 	// Create Session B with completely different state
 	m, sessionB := m.CreateSession("session-b")
@@ -5754,19 +5754,19 @@ func TestSessionIsolation_MultipleSessionsIndependent(t *testing.T) {
 	session1 := m.ActiveSession()
 	session1.Status = events.ProcessStatusWorking
 	session1.QueueCount = 2
-	session1.Metrics = &metrics.TokenMetrics{TokensUsed: 30000, TotalTokens: 200000}
+	session1.Metrics = &metrics.TokenMetrics{TokensUsed: 30000, TotalTokens: 1000000}
 
 	// Session 2: Ready, 0 queued, 60k tokens
 	m, session2 := m.CreateSession("session-2")
 	session2.Status = events.ProcessStatusReady
 	session2.QueueCount = 0
-	session2.Metrics = &metrics.TokenMetrics{TokensUsed: 60000, TotalTokens: 200000}
+	session2.Metrics = &metrics.TokenMetrics{TokensUsed: 60000, TotalTokens: 1000000}
 
 	// Session 3: Paused, 1 queued, 90k tokens
 	m, session3 := m.CreateSession("session-3")
 	session3.Status = events.ProcessStatusPaused
 	session3.QueueCount = 1
-	session3.Metrics = &metrics.TokenMetrics{TokensUsed: 90000, TotalTokens: 200000}
+	session3.Metrics = &metrics.TokenMetrics{TokensUsed: 90000, TotalTokens: 1000000}
 
 	// Round-robin through sessions and verify each shows correct state
 	testCases := []struct {

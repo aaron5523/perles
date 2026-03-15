@@ -16,7 +16,7 @@ func TestParser_NewParser(t *testing.T) {
 func TestParser_ContextWindowSize(t *testing.T) {
 	p := NewParser()
 	size := p.ContextWindowSize()
-	require.Equal(t, 200000, size, "ContextWindowSize should return 200000 for Cursor")
+	require.Equal(t, 1000000, size, "ContextWindowSize should return 1000000 for Cursor")
 }
 
 func TestParser_ParseEvent_AssistantMessage(t *testing.T) {
@@ -116,7 +116,7 @@ func TestParser_ParseEvent_WithUsage(t *testing.T) {
 	require.Equal(t, client.EventAssistant, event.Type)
 	require.NotNil(t, event.Usage)
 	require.Equal(t, 7500, event.Usage.TokensUsed) // input + cache_read + cache_creation
-	require.Equal(t, 200000, event.Usage.TotalTokens)
+	require.Equal(t, 1000000, event.Usage.TotalTokens)
 	require.Equal(t, 1000, event.Usage.OutputTokens)
 }
 

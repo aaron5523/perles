@@ -314,11 +314,11 @@ func TestSetWorkflow_SyncsMetrics(t *testing.T) {
 
 	coordinatorMetrics := &metrics.TokenMetrics{
 		TokensUsed:  27000,
-		TotalTokens: 200000,
+		TotalTokens: 1000000,
 	}
 	workerMetrics := map[string]*metrics.TokenMetrics{
-		"worker-1": {TokensUsed: 15000, TotalTokens: 200000},
-		"worker-2": {TokensUsed: 8000, TotalTokens: 200000},
+		"worker-1": {TokensUsed: 15000, TotalTokens: 1000000},
+		"worker-2": {TokensUsed: 8000, TotalTokens: 1000000},
 	}
 
 	state := &WorkflowUIState{
@@ -336,7 +336,7 @@ func TestSetWorkflow_SyncsMetrics(t *testing.T) {
 	// Verify coordinator metrics synced
 	require.Equal(t, coordinatorMetrics, panel.coordinatorMetrics)
 	require.Equal(t, 27000, panel.coordinatorMetrics.TokensUsed)
-	require.Equal(t, 200000, panel.coordinatorMetrics.TotalTokens)
+	require.Equal(t, 1000000, panel.coordinatorMetrics.TotalTokens)
 
 	// Verify worker metrics synced
 	require.Len(t, panel.workerMetrics, 2)
@@ -349,14 +349,14 @@ func TestSetWorkflow_ClearsStaleMetrics(t *testing.T) {
 
 	// First workflow with worker-1 and worker-2
 	state1 := &WorkflowUIState{
-		CoordinatorMetrics: &metrics.TokenMetrics{TokensUsed: 10000, TotalTokens: 200000},
+		CoordinatorMetrics: &metrics.TokenMetrics{TokensUsed: 10000, TotalTokens: 1000000},
 		WorkerIDs:          []string{"worker-1", "worker-2"},
 		WorkerStatus:       make(map[string]events.ProcessStatus),
 		WorkerPhases:       make(map[string]events.ProcessPhase),
 		WorkerMessages:     make(map[string][]chatrender.Message),
 		WorkerMetrics: map[string]*metrics.TokenMetrics{
-			"worker-1": {TokensUsed: 5000, TotalTokens: 200000},
-			"worker-2": {TokensUsed: 3000, TotalTokens: 200000},
+			"worker-1": {TokensUsed: 5000, TotalTokens: 1000000},
+			"worker-2": {TokensUsed: 3000, TotalTokens: 1000000},
 		},
 		WorkerQueueCounts: make(map[string]int),
 	}
@@ -369,13 +369,13 @@ func TestSetWorkflow_ClearsStaleMetrics(t *testing.T) {
 
 	// Second workflow with only worker-3 (different set of workers)
 	state2 := &WorkflowUIState{
-		CoordinatorMetrics: &metrics.TokenMetrics{TokensUsed: 20000, TotalTokens: 200000},
+		CoordinatorMetrics: &metrics.TokenMetrics{TokensUsed: 20000, TotalTokens: 1000000},
 		WorkerIDs:          []string{"worker-3"},
 		WorkerStatus:       make(map[string]events.ProcessStatus),
 		WorkerPhases:       make(map[string]events.ProcessPhase),
 		WorkerMessages:     make(map[string][]chatrender.Message),
 		WorkerMetrics: map[string]*metrics.TokenMetrics{
-			"worker-3": {TokensUsed: 7000, TotalTokens: 200000},
+			"worker-3": {TokensUsed: 7000, TotalTokens: 1000000},
 		},
 		WorkerQueueCounts: make(map[string]int),
 	}
@@ -399,7 +399,7 @@ func TestGetActiveMetricsDisplay_Coordinator(t *testing.T) {
 	state := &WorkflowUIState{
 		CoordinatorMetrics: &metrics.TokenMetrics{
 			TokensUsed:  27000,
-			TotalTokens: 200000,
+			TotalTokens: 1000000,
 		},
 	}
 	panel.SetWorkflow("wf-123", state)
@@ -407,10 +407,10 @@ func TestGetActiveMetricsDisplay_Coordinator(t *testing.T) {
 
 	result := panel.getActiveMetricsDisplay()
 
-	// FormatMetricsDisplay returns formatted string like "27k/200k"
+	// FormatMetricsDisplay returns formatted string like "27k/1000k"
 	require.NotEmpty(t, result)
 	require.Contains(t, result, "27k")
-	require.Contains(t, result, "200k")
+	require.Contains(t, result, "1000k")
 }
 
 func TestGetActiveMetricsDisplay_Worker(t *testing.T) {
@@ -422,8 +422,8 @@ func TestGetActiveMetricsDisplay_Worker(t *testing.T) {
 		WorkerStatus: make(map[string]events.ProcessStatus),
 		WorkerPhases: make(map[string]events.ProcessPhase),
 		WorkerMetrics: map[string]*metrics.TokenMetrics{
-			"worker-1": {TokensUsed: 15000, TotalTokens: 200000},
-			"worker-2": {TokensUsed: 8000, TotalTokens: 200000},
+			"worker-1": {TokensUsed: 15000, TotalTokens: 1000000},
+			"worker-2": {TokensUsed: 8000, TotalTokens: 1000000},
 		},
 		WorkerMessages:    make(map[string][]chatrender.Message),
 		WorkerQueueCounts: make(map[string]int),
@@ -435,20 +435,20 @@ func TestGetActiveMetricsDisplay_Worker(t *testing.T) {
 
 	result := panel.getActiveMetricsDisplay()
 
-	// Should show worker-1's metrics (15k/200k)
+	// Should show worker-1's metrics (15k/1000k)
 	require.NotEmpty(t, result)
 	require.Contains(t, result, "15k")
-	require.Contains(t, result, "200k")
+	require.Contains(t, result, "1000k")
 
 	// Select worker-2 tab (TabFirstWorker + 1)
 	panel.activeTab = TabFirstWorker + 1
 
 	result = panel.getActiveMetricsDisplay()
 
-	// Should show worker-2's metrics (8k/200k)
+	// Should show worker-2's metrics (8k/1000k)
 	require.NotEmpty(t, result)
 	require.Contains(t, result, "8k")
-	require.Contains(t, result, "200k")
+	require.Contains(t, result, "1000k")
 }
 
 func TestGetActiveMetricsDisplay_Messages(t *testing.T) {
@@ -458,7 +458,7 @@ func TestGetActiveMetricsDisplay_Messages(t *testing.T) {
 	state := &WorkflowUIState{
 		CoordinatorMetrics: &metrics.TokenMetrics{
 			TokensUsed:  27000,
-			TotalTokens: 200000,
+			TotalTokens: 1000000,
 		},
 	}
 	panel.SetWorkflow("wf-123", state)
@@ -507,7 +507,7 @@ func TestGetActiveMetricsDisplay_InvalidWorkerTab(t *testing.T) {
 		WorkerStatus: make(map[string]events.ProcessStatus),
 		WorkerPhases: make(map[string]events.ProcessPhase),
 		WorkerMetrics: map[string]*metrics.TokenMetrics{
-			"worker-1": {TokensUsed: 15000, TotalTokens: 200000},
+			"worker-1": {TokensUsed: 15000, TotalTokens: 1000000},
 		},
 		WorkerMessages:    make(map[string][]chatrender.Message),
 		WorkerQueueCounts: make(map[string]int),
@@ -531,7 +531,7 @@ func TestView_ShowsMetricsInBottomRight(t *testing.T) {
 	state := &WorkflowUIState{
 		CoordinatorMetrics: &metrics.TokenMetrics{
 			TokensUsed:  27000,
-			TotalTokens: 200000,
+			TotalTokens: 1000000,
 		},
 		CoordinatorStatus: events.ProcessStatusWorking,
 	}
@@ -541,8 +541,8 @@ func TestView_ShowsMetricsInBottomRight(t *testing.T) {
 	view := panel.View()
 
 	// Verify the metrics string appears in the rendered output
-	// FormatMetricsDisplay returns "27k/200k" for these values
-	require.Contains(t, view, "27k/200k", "metrics should appear in View() output")
+	// FormatMetricsDisplay returns "27k/1000k" for these values
+	require.Contains(t, view, "27k/1000k", "metrics should appear in View() output")
 }
 
 func TestView_MetricsFitInPanelWidth(t *testing.T) {
@@ -555,7 +555,7 @@ func TestView_MetricsFitInPanelWidth(t *testing.T) {
 	state := &WorkflowUIState{
 		CoordinatorMetrics: &metrics.TokenMetrics{
 			TokensUsed:  27000,
-			TotalTokens: 200000,
+			TotalTokens: 1000000,
 		},
 		CoordinatorStatus:     events.ProcessStatusWorking,
 		CoordinatorQueueCount: 3, // Will show "[3 queued]" in BottomLeft
@@ -568,7 +568,7 @@ func TestView_MetricsFitInPanelWidth(t *testing.T) {
 	// Verify both queue count and metrics appear without truncation
 	// FormatQueueCount returns "[N queued]" format
 	require.Contains(t, view, "[3 queued]", "queue count should appear in BottomLeft")
-	require.Contains(t, view, "27k/200k", "metrics should appear in BottomRight")
+	require.Contains(t, view, "27k/1000k", "metrics should appear in BottomRight")
 
 	// Verify no line exceeds panel width (basic overflow check)
 	lines := splitLines(view)

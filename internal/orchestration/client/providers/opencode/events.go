@@ -100,7 +100,7 @@ type opcodeError struct {
 
 // opcodeErrorData represents nested error data in API errors.
 type opcodeErrorData struct {
-	Message     string `json:"message,omitempty"`     // e.g., "prompt is too long: 200561 tokens > 200000 maximum"
+	Message     string `json:"message,omitempty"`     // e.g., "prompt is too long: 1000561 tokens > 1000000 maximum"
 	StatusCode  int    `json:"statusCode,omitempty"`  //nolint:tagliatelle // matches actual OpenCode API
 	IsRetryable bool   `json:"isRetryable,omitempty"` //nolint:tagliatelle // matches actual OpenCode API
 }

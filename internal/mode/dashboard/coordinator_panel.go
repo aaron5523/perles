@@ -1081,7 +1081,7 @@ func (p *CoordinatorPanel) getActiveBottomIndicators() string {
 }
 
 // getActiveMetricsDisplay returns the metrics display string for the active tab.
-// Returns formatted token usage (e.g., "27k/200k") for coordinator or worker tabs,
+// Returns formatted token usage (e.g., "27k/1000k") for coordinator or worker tabs,
 // or empty string for the message log tab or when no metrics are available.
 func (p *CoordinatorPanel) getActiveMetricsDisplay() string {
 	switch {

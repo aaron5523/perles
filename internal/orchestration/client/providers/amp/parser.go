@@ -8,7 +8,7 @@ import (
 
 const (
 	// AmpContextWindowSize is the context window size for Amp (Claude models).
-	AmpContextWindowSize = 200000
+	AmpContextWindowSize = 1000000
 )
 
 // Parser implements client.EventParser for Amp CLI JSON events.

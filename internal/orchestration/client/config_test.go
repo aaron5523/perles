@@ -14,24 +14,24 @@ func TestExtensionKeys_CodexConstants(t *testing.T) {
 
 func TestConfig_CodexModel_Default(t *testing.T) {
 	cfg := Config{}
-	require.Equal(t, "gpt-5.2-codex", cfg.CodexModel())
+	require.Equal(t, "gpt-5.4", cfg.CodexModel())
 }
 
 func TestConfig_CodexModel_NilExtensions(t *testing.T) {
 	cfg := Config{Extensions: nil}
-	require.Equal(t, "gpt-5.2-codex", cfg.CodexModel())
+	require.Equal(t, "gpt-5.4", cfg.CodexModel())
 }
 
 func TestConfig_CodexModel_EmptyExtensions(t *testing.T) {
 	cfg := Config{Extensions: map[string]any{}}
-	require.Equal(t, "gpt-5.2-codex", cfg.CodexModel())
+	require.Equal(t, "gpt-5.4", cfg.CodexModel())
 }
 
 func TestConfig_CodexModel_EmptyString(t *testing.T) {
 	cfg := Config{Extensions: map[string]any{
 		ExtCodexModel: "",
 	}}
-	require.Equal(t, "gpt-5.2-codex", cfg.CodexModel())
+	require.Equal(t, "gpt-5.4", cfg.CodexModel())
 }
 
 func TestConfig_CodexModel_CustomModel(t *testing.T) {
@@ -45,7 +45,7 @@ func TestConfig_CodexModel_WrongType(t *testing.T) {
 	cfg := Config{Extensions: map[string]any{
 		ExtCodexModel: 123, // Not a string
 	}}
-	require.Equal(t, "gpt-5.2-codex", cfg.CodexModel())
+	require.Equal(t, "gpt-5.4", cfg.CodexModel())
 }
 
 func TestConfig_CodexModel_ViaSetExtension(t *testing.T) {
@@ -120,24 +120,24 @@ func TestConfig_GeminiModel_ViaSetExtension(t *testing.T) {
 
 func TestConfig_OpenCodeModel_Default(t *testing.T) {
 	cfg := Config{}
-	require.Equal(t, "anthropic/claude-opus-4-5", cfg.OpenCodeModel())
+	require.Equal(t, "anthropic/claude-opus-4-6", cfg.OpenCodeModel())
 }
 
 func TestConfig_OpenCodeModel_NilExtensions(t *testing.T) {
 	cfg := Config{Extensions: nil}
-	require.Equal(t, "anthropic/claude-opus-4-5", cfg.OpenCodeModel())
+	require.Equal(t, "anthropic/claude-opus-4-6", cfg.OpenCodeModel())
 }
 
 func TestConfig_OpenCodeModel_EmptyExtensions(t *testing.T) {
 	cfg := Config{Extensions: map[string]any{}}
-	require.Equal(t, "anthropic/claude-opus-4-5", cfg.OpenCodeModel())
+	require.Equal(t, "anthropic/claude-opus-4-6", cfg.OpenCodeModel())
 }
 
 func TestConfig_OpenCodeModel_EmptyString(t *testing.T) {
 	cfg := Config{Extensions: map[string]any{
 		ExtOpenCodeModel: "",
 	}}
-	require.Equal(t, "anthropic/claude-opus-4-5", cfg.OpenCodeModel())
+	require.Equal(t, "anthropic/claude-opus-4-6", cfg.OpenCodeModel())
 }
 
 func TestConfig_OpenCodeModel_CustomModel(t *testing.T) {
@@ -151,7 +151,7 @@ func TestConfig_OpenCodeModel_WrongType(t *testing.T) {
 	cfg := Config{Extensions: map[string]any{
 		ExtOpenCodeModel: 123, // Not a string
 	}}
-	require.Equal(t, "anthropic/claude-opus-4-5", cfg.OpenCodeModel())
+	require.Equal(t, "anthropic/claude-opus-4-6", cfg.OpenCodeModel())
 }
 
 func TestConfig_OpenCodeModel_ViaSetExtension(t *testing.T) {
