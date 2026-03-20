@@ -63,3 +63,7 @@ debug.log
 # Build files
 dist/
 !frontend/dist/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db

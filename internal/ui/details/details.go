@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/muesli/reflow/wordwrap"
 )
 
@@ -60,6 +61,13 @@ type OpenEditMenuMsg struct {
 	Issue task.Issue
 }
 
+// CopyIDMsg requests copying an issue ID to the clipboard.
+type CopyIDMsg struct {
+	IssueID string
+}
+
+const zoneDetailIDPrefix = "detail-id-"
+
 // FocusPane represents which pane has focus in the details view.
 type FocusPane int
 
@@ -86,12 +94,7 @@ type Model struct {
 	commentLoader      task.TaskReader
 	commentsLoaded     bool
 	commentsError      error
-	hideFooter         bool // When true, footer is not rendered (e.g., in dashboard mode)
-
-	// Cached renders to avoid recomputing on every scroll
-	cachedHeader   string
-	cachedMetadata string
-	cacheValid     bool
+	hideFooter bool // When true, footer is not rendered (e.g., in dashboard mode)
 }
 
 // New creates a new detail view.
@@ -165,13 +168,6 @@ func (m Model) SetSize(width, height int) Model {
 		m.viewport.SetContent(m.renderLeftColumn())
 		// Scroll position preserved - GotoTop() removed to enable scroll restoration
 	}
-
-	// Pre-compute cached renders for scroll performance
-	m.cachedHeader = m.renderHeader()
-	if m.useTwoColumnLayout() {
-		m.cachedMetadata = m.renderMetadataColumn()
-	}
-	m.cacheValid = true
 
 	return m
 }
@@ -293,7 +289,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseMsg:
-		// Only handle wheel events for scrolling
+		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionRelease {
+			// Check if any issue ID zone was clicked
+			for _, id := range m.clickableIDs() {
+				zoneID := zoneDetailIDPrefix + id
+				if z := zone.Get(zoneID); z != nil && z.InBounds(msg) {
+					return m, func() tea.Msg { return CopyIDMsg{IssueID: id} }
+				}
+			}
+		}
+		// Handle wheel events for scrolling
 		if msg.Button != tea.MouseButtonWheelUp && msg.Button != tea.MouseButtonWheelDown {
 			return m, nil
 		}
@@ -339,11 +344,8 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	// Use cached header/metadata if available (they don't change during scrolling)
-	header := m.cachedHeader
-	if !m.cacheValid || header == "" {
-		header = m.renderHeader()
-	}
+	// Always render header fresh so zone.Mark() calls register in the current render cycle
+	header := m.renderHeader()
 	footer := ""
 	if !m.hideFooter {
 		footer = m.renderFooter()
@@ -354,10 +356,8 @@ func (m Model) View() string {
 		// Two-column layout: left (header + scrollable content) + right (static metadata)
 		// Include header in left column so both columns start at top
 		leftCol := header + m.viewport.View()
-		rightCol := m.cachedMetadata
-		if !m.cacheValid || rightCol == "" {
-			rightCol = m.renderMetadataColumn()
-		}
+		// Always render metadata fresh so zone.Mark() calls register in the current render cycle
+		rightCol := m.renderMetadataColumn()
 
 		// Get calculated column widths (fixed or percentage-based)
 		leftWidth, rightWidth := m.calculateColumnWidths()
@@ -454,7 +454,7 @@ func (m Model) renderHeader() string {
 	titleLine := fmt.Sprintf("%s%s%s %s",
 		typeStyle.Render(typeText),
 		priorityStyle.Render(priorityText),
-		idStyle.Render(issueId),
+		zone.Mark(zoneDetailIDPrefix+issue.ID, idStyle.Render(issueId)),
 		issue.TitleText,
 	)
 
@@ -761,7 +761,7 @@ func (m Model) renderDependencyItem(item DependencyItem, selected bool) string {
 
 	if item.Issue == nil {
 		// Fallback: just show ID if load failed
-		return prefix + idStyle.Render(item.ID)
+		return prefix + zone.Mark(zoneDetailIDPrefix+item.ID, idStyle.Render(item.ID))
 	}
 
 	// Use board styling functions - compact format without title
@@ -774,7 +774,7 @@ func (m Model) renderDependencyItem(item DependencyItem, selected bool) string {
 		prefix,
 		typeStyle.Render(typeText),
 		priorityStyle.Render(priorityText),
-		idStyle.Render("["+item.ID+"]"),
+		zone.Mark(zoneDetailIDPrefix+item.ID, idStyle.Render("["+item.ID+"]")),
 		renderStatusIndicator(item.Issue.Status),
 	)
 }
@@ -1008,6 +1008,15 @@ func formatType(t task.IssueType) string {
 	default:
 		return string(t)
 	}
+}
+
+// clickableIDs returns all issue IDs that have clickable zones.
+func (m Model) clickableIDs() []string {
+	ids := []string{m.issue.ID}
+	for _, dep := range m.dependencies {
+		ids = append(ids, dep.ID)
+	}
+	return ids
 }
 
 // IssueID returns the ID of the currently displayed issue.

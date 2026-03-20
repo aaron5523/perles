@@ -250,6 +250,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.editingIssue = nil // Clear on cancel too
 		return m, nil
 
+	case details.CopyIDMsg:
+		if err := m.services.Clipboard.Copy(msg.IssueID); err != nil {
+			m.err = err
+			m.errContext = "copying to clipboard"
+			return m, scheduleErrorClear()
+		}
+		return m, func() tea.Msg { return mode.ShowToastMsg{Message: "Copied: " + msg.IssueID, Style: toaster.StyleSuccess} }
+
 	case details.DeleteIssueMsg:
 		return m.openDeleteConfirm(msg)
 
