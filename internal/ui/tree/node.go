@@ -4,6 +4,7 @@ package tree
 import (
 	"fmt"
 
+	"github.com/zjrosen/perles/internal/issuesort"
 	"github.com/zjrosen/perles/internal/task"
 )
 
@@ -115,6 +116,9 @@ func buildNode(
 	if mode == ModeDeps && len(relatedIDs) > 1 {
 		relatedIDs = sortByBlockOrder(relatedIDs, issueMap, dir)
 	}
+
+	// Natural sort so numeric suffixes like .1.2, .1.10 sort numerically
+	issuesort.NaturalIDs(relatedIDs)
 
 	// Build child nodes (only for issues that exist in the map)
 	for _, relatedID := range relatedIDs {
@@ -250,3 +254,4 @@ func (n *TreeNode) CalculateProgress() (closed, total int) {
 
 	return closed, total
 }
+

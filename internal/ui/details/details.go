@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zjrosen/perles/internal/issuesort"
 	"github.com/zjrosen/perles/internal/keys"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/markdown"
@@ -1039,7 +1040,10 @@ func (m *Model) loadDependencies() {
 	for _, id := range m.issue.Blocks {
 		items = append(items, DependencyItem{ID: id, Category: "blocks"})
 	}
-	for _, id := range m.issue.Children {
+	children := make([]string, len(m.issue.Children))
+	copy(children, m.issue.Children)
+	issuesort.NaturalIDs(children)
+	for _, id := range children {
 		items = append(items, DependencyItem{ID: id, Category: "children"})
 	}
 	for _, id := range m.issue.DiscoveredFrom {
