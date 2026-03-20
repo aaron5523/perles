@@ -1267,22 +1267,18 @@ func (m Model) handleEpicSeparatorDrag(msg tea.MouseMsg) (mode.Controller, tea.C
 
 		// Calculate new percentage from mouse X position
 		relativeX := msg.X - sectionStartX
+		if relativeX < 0 {
+			relativeX = 0
+		}
 		newPct := relativeX * 100 / sectionWidth
 
 		// Clamp to ensure minimum widths for both panes
-		minPct := epicTreeMinWidth * 100 / sectionWidth
-		maxPct := 100 - (epicDetailsMinWidth * 100 / sectionWidth)
-		if minPct < 15 {
-			minPct = 15
+		// (absolute pixel minimums are enforced by calculateEpicTreeLayout)
+		if newPct < 15 {
+			newPct = 15
 		}
-		if maxPct > 85 {
-			maxPct = 85
-		}
-		if newPct < minPct {
-			newPct = minPct
-		}
-		if newPct > maxPct {
-			newPct = maxPct
+		if newPct > 85 {
+			newPct = 85
 		}
 
 		m.epicTreeWidthPct = newPct

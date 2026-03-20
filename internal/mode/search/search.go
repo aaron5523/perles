@@ -553,8 +553,10 @@ func (m Model) SetSize(width, height int) Model {
 		return m
 	}
 
-	// Cancel any in-progress drag on resize
-	m.separatorDragging = false
+	// Cancel drag only on actual terminal resize (not internal layout recalcs)
+	if width != m.width || height != m.height {
+		m.separatorDragging = false
+	}
 
 	// Calculate split using dynamic percentage
 	leftWidth, rightWidth := m.splitWidths()
@@ -1358,7 +1360,6 @@ func (m Model) handleNavUp() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleMouseClick handles left-click release events on issues and the search input.
 // handleSeparatorDrag handles mouse drag on the separator between left and right panes.
 // Returns (model, cmd, handled). If handled is true, the caller should return early.
 func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
@@ -1385,9 +1386,8 @@ func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		}
 
 		m.leftWidthPct = newPct
-		// Recalculate component sizes (SetSize resets drag state, so restore it)
+		// Recalculate component sizes for the new split
 		m = m.SetSize(m.width, m.height)
-		m.separatorDragging = true
 		return m, nil, true
 	}
 
@@ -1412,6 +1412,7 @@ func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 	return m, nil, false
 }
 
+// handleMouseClick handles left-click release events on issues and the search input.
 func (m Model) handleMouseClick(msg tea.MouseMsg) (Model, tea.Cmd) {
 	// Click on search input focuses it
 	if z := zone.Get(zoneSearchInput); z != nil && z.InBounds(msg) {
@@ -2333,6 +2334,9 @@ const (
 
 // splitWidths calculates the left/right pane widths using the dynamic percentage.
 func (m Model) splitWidths() (leftWidth, rightWidth int) {
+	if m.width <= 0 {
+		return 0, 0
+	}
 	leftWidth = m.width * m.leftWidthPct / 100
 	if leftWidth < searchMinPaneChar {
 		leftWidth = searchMinPaneChar
