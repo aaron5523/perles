@@ -56,13 +56,13 @@ type epicTreeLayout struct {
 }
 
 // calculateEpicTreeLayout computes the tree/details width split.
-func calculateEpicTreeLayout(availableWidth int) epicTreeLayout {
+func calculateEpicTreeLayout(availableWidth, treeWidthPercent int) epicTreeLayout {
 	showDetails := availableWidth >= minWidthForDetails
 	if !showDetails {
 		return epicTreeLayout{treeWidth: availableWidth, detailsWidth: 0, showDetails: false}
 	}
 
-	treeWidth := availableWidth * epicTreeWidthPercent / 100
+	treeWidth := availableWidth * treeWidthPercent / 100
 	detailsWidth := availableWidth - treeWidth
 
 	if treeWidth < epicTreeMinWidth {
@@ -580,7 +580,7 @@ func (m Model) renderEpicSection(width, height int) string {
 	}
 
 	// Calculate tree/details layout
-	layout := calculateEpicTreeLayout(width)
+	layout := calculateEpicTreeLayout(width, m.epicTreeWidthPct)
 
 	// Set sizes for tree
 	m.epicTree.SetSize(layout.treeWidth-2, height-2) // -2 for borders

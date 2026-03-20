@@ -144,6 +144,10 @@ type Model struct {
 	lastLoadedEpicID string         // ID of the last loaded epic (for stale response detection)
 	focus            DashboardFocus // Which zone has focus (table, epic, coordinator)
 
+	// Draggable separator between epic tree and details panes
+	epicTreeDragging bool // Whether user is currently dragging the separator
+	epicTreeWidthPct int  // Current tree width percentage (default 45, persisted during session)
+
 	// Event subscription (global - all workflows)
 	eventCh     <-chan controlplane.ControlPlaneEvent
 	unsubscribe func()
@@ -233,6 +237,7 @@ func New(cfg Config) Model {
 		debugMode:          cfg.DebugMode,
 		vimMode:            cfg.VimMode,
 		observerEnabled:    cfg.ObserverEnabled,
+		epicTreeWidthPct:   epicTreeWidthPercent,
 	}
 
 	// Initialize the workflow table with config
@@ -623,6 +628,7 @@ func (m Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.epicTreeDragging = false // Cancel any in-progress drag
 		// Update coordinator panel size if visible
 		if m.coordinatorPanel != nil {
 			m.coordinatorPanel.SetSize(CoordinatorPanelWidth, m.height)
@@ -714,7 +720,7 @@ func (m Model) SetSize(width, height int) mode.Controller {
 			}
 
 			// Calculate tree/details layout
-			layout := calculateEpicTreeLayout(epicWidth)
+			layout := calculateEpicTreeLayout(epicWidth, m.epicTreeWidthPct)
 
 			// Set tree size
 			m.epicTree.SetSize(layout.treeWidth-2, epicSectionHeight-2)
@@ -1097,6 +1103,11 @@ func (m Model) handleCoordinatorKeys(msg tea.KeyMsg) (mode.Controller, tea.Cmd) 
 
 // handleMouseMsg handles mouse input for zone clicks and scrolling.
 func (m Model) handleMouseMsg(msg tea.MouseMsg) (mode.Controller, tea.Cmd) {
+	// Handle epic tree separator drag (takes priority over click handlers)
+	if result, cmd, handled := m.handleEpicSeparatorDrag(msg); handled {
+		return result, cmd
+	}
+
 	// Only handle left-click release events for zone selection
 	if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionRelease {
 		// Check workflow row zones
@@ -1228,6 +1239,77 @@ func (m Model) handleMouseMsg(msg tea.MouseMsg) (mode.Controller, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleEpicSeparatorDrag handles mouse drag on the separator between epic tree and details panes.
+// Returns (model, cmd, handled). If handled is true, the caller should return early.
+func (m Model) handleEpicSeparatorDrag(msg tea.MouseMsg) (mode.Controller, tea.Cmd, bool) {
+	// Mouse release: stop dragging
+	if m.epicTreeDragging && msg.Action == tea.MouseActionRelease {
+		m.epicTreeDragging = false
+		return m, nil, true
+	}
+
+	// Mouse motion while dragging: update width percentage
+	if m.epicTreeDragging && msg.Action == tea.MouseActionMotion {
+		treeZone := zone.Get(zoneEpicTree)
+		detailsZone := zone.Get(zoneEpicDetails)
+		if treeZone == nil || detailsZone == nil {
+			return m, nil, true
+		}
+
+		// The epic section spans from tree's left edge to details' right edge
+		sectionStartX := treeZone.StartX
+		sectionWidth := detailsZone.EndX - treeZone.StartX + 1
+		if sectionWidth <= 0 {
+			return m, nil, true
+		}
+
+		// Calculate new percentage from mouse X position
+		relativeX := msg.X - sectionStartX
+		newPct := relativeX * 100 / sectionWidth
+
+		// Clamp to ensure minimum widths for both panes
+		minPct := epicTreeMinWidth * 100 / sectionWidth
+		maxPct := 100 - (epicDetailsMinWidth * 100 / sectionWidth)
+		if minPct < 15 {
+			minPct = 15
+		}
+		if maxPct > 85 {
+			maxPct = 85
+		}
+		if newPct < minPct {
+			newPct = minPct
+		}
+		if newPct > maxPct {
+			newPct = maxPct
+		}
+
+		m.epicTreeWidthPct = newPct
+		return m, nil, true
+	}
+
+	// Mouse press: detect if near the separator to start dragging
+	if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+		treeZone := zone.Get(zoneEpicTree)
+		detailsZone := zone.Get(zoneEpicDetails)
+
+		if treeZone != nil && detailsZone != nil {
+			// The separator is where the tree's right border meets the details' left border
+			hitLeft := treeZone.EndX - 1
+			hitRight := detailsZone.StartX + 1
+
+			if msg.X >= hitLeft && msg.X <= hitRight &&
+				msg.Y >= treeZone.StartY && msg.Y <= treeZone.EndY {
+				m.epicTreeDragging = true
+				m.focus = FocusEpicView
+				m.updateComponentFocusStates()
+				return m, nil, true
+			}
+		}
+	}
+
+	return m, nil, false
 }
 
 // toggleCoordinatorPanel toggles the coordinator chat panel for the selected workflow.

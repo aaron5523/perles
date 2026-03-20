@@ -162,7 +162,7 @@ func (m *Model) calculateEpicDetailsSize() (int, int) {
 		epicWidth = m.width - CoordinatorPanelWidth
 	}
 
-	layout := calculateEpicTreeLayout(epicWidth)
+	layout := calculateEpicTreeLayout(epicWidth, m.epicTreeWidthPct)
 	return layout.detailsWidth - 2, epicSectionHeight - 2
 }
 

@@ -103,6 +103,10 @@ type Model struct {
 	width  int
 	height int
 
+	// Draggable separator between left (tree/list) and right (details) panes
+	separatorDragging bool // Whether user is currently dragging the separator
+	leftWidthPct      int  // Current left panel width percentage (default 50)
+
 	// User-defined actions (key -> action config)
 	actions map[string]config.ActionConfig
 }
@@ -499,13 +503,14 @@ func New(services mode.Services) Model {
 	}
 
 	return Model{
-		services:    services,
-		input:       input,
-		resultsList: resultsList,
-		focus:       FocusSearch,
-		view:        ViewSearch,
-		help:        help.NewSearch().WithUserActions(userActions),
-		actions:     actions,
+		services:     services,
+		input:        input,
+		resultsList:  resultsList,
+		focus:        FocusSearch,
+		view:         ViewSearch,
+		help:         help.NewSearch().WithUserActions(userActions),
+		actions:      actions,
+		leftWidthPct: 50,
 	}
 }
 
@@ -548,9 +553,11 @@ func (m Model) SetSize(width, height int) Model {
 		return m
 	}
 
-	// Calculate 50/50 split
-	leftWidth := width / 2
-	rightWidth := width - leftWidth - 1 // -1 for divider
+	// Cancel any in-progress drag on resize
+	m.separatorDragging = false
+
+	// Calculate split using dynamic percentage
+	leftWidth, rightWidth := m.splitWidths()
 
 	// Update input size (vimtextarea uses SetSize for width/height)
 	inputWidth := max(leftWidth-4, 1) // Padding
@@ -595,6 +602,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.issueEditor, cmd = m.issueEditor.Update(mouseMsg)
 			return m, cmd
 		}
+
+		// Handle separator drag (takes priority over other mouse handlers)
+		if result, cmd, handled := m.handleSeparatorDrag(mouseMsg); handled {
+			return result, cmd
+		}
+
 		// Forward wheel events to details regardless of focus
 		if mouseMsg.Button == tea.MouseButtonWheelUp || mouseMsg.Button == tea.MouseButtonWheelDown {
 			var cmd tea.Cmd
@@ -1346,6 +1359,59 @@ func (m Model) handleNavUp() (Model, tea.Cmd) {
 }
 
 // handleMouseClick handles left-click release events on issues and the search input.
+// handleSeparatorDrag handles mouse drag on the separator between left and right panes.
+// Returns (model, cmd, handled). If handled is true, the caller should return early.
+func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
+	// Mouse release: stop dragging
+	if m.separatorDragging && msg.Action == tea.MouseActionRelease {
+		m.separatorDragging = false
+		return m, nil, true
+	}
+
+	// Mouse motion while dragging: update width percentage
+	if m.separatorDragging && msg.Action == tea.MouseActionMotion {
+		if m.width <= 0 {
+			return m, nil, true
+		}
+
+		newPct := msg.X * 100 / m.width
+
+		// Clamp
+		if newPct < searchMinLeftPct {
+			newPct = searchMinLeftPct
+		}
+		if newPct > searchMaxLeftPct {
+			newPct = searchMaxLeftPct
+		}
+
+		m.leftWidthPct = newPct
+		// Recalculate component sizes (SetSize resets drag state, so restore it)
+		m = m.SetSize(m.width, m.height)
+		m.separatorDragging = true
+		return m, nil, true
+	}
+
+	// Mouse press: detect if near the separator to start dragging
+	if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+		leftZone := zone.Get(zoneSearchLeft)
+		detailsZone := zone.Get(zoneSearchDetails)
+
+		if leftZone != nil && detailsZone != nil {
+			// Hit zone: from left pane's right edge to details pane's left edge (plus 1 col tolerance)
+			hitLeft := leftZone.EndX - 1
+			hitRight := detailsZone.StartX + 1
+
+			if msg.X >= hitLeft && msg.X <= hitRight &&
+				msg.Y >= leftZone.StartY && msg.Y <= leftZone.EndY {
+				m.separatorDragging = true
+				return m, nil, true
+			}
+		}
+	}
+
+	return m, nil, false
+}
+
 func (m Model) handleMouseClick(msg tea.MouseMsg) (Model, tea.Cmd) {
 	// Click on search input focuses it
 	if z := zone.Get(zoneSearchInput); z != nil && z.InBounds(msg) {
@@ -1408,7 +1474,7 @@ func (m Model) handleMouseClick(msg tea.MouseMsg) (Model, tea.Cmd) {
 func (m *Model) updateDetailPanel() {
 	if m.selectedIdx >= 0 && m.selectedIdx < len(m.results) {
 		issue := m.results[m.selectedIdx]
-		rightWidth := m.width - (m.width / 2) - 1
+		_, rightWidth := m.splitWidths()
 
 		// Preserve scroll position if viewing the same issue
 		var prevOffset int
@@ -1443,7 +1509,7 @@ func (m *Model) updateDetailFromTree() {
 	if node == nil {
 		return
 	}
-	rightWidth := m.width - (m.width / 2) - 1
+	_, rightWidth := m.splitWidths()
 
 	// Preserve scroll position if viewing the same issue
 	var prevOffset int
@@ -1775,7 +1841,7 @@ func (m Model) handleTreeLoaded(msg treeLoadedMsg) (Model, tea.Cmd) {
 	m.tree.SetZonePrefix(zoneSearchTreePrefix)
 
 	// Set tree size based on available space (must be done before restoring cursor)
-	leftWidth := m.width / 2
+	leftWidth, _ := m.splitWidths()
 	// Tree height accounts for: borders (2)
 	treeHeight := max(m.height-2, 1)
 	m.tree.SetSize(leftWidth-2, treeHeight) // -2 for border
@@ -1812,7 +1878,7 @@ func (m Model) navigateToDependency(issueID string) (Model, tea.Cmd) {
 	issue := issues[0]
 
 	// Update the details panel with this issue
-	rightWidth := m.width - (m.width / 2) - 1
+	_, rightWidth := m.splitWidths()
 	// rightWidth-2 for left/right border, height-2 for top/bottom border
 	m.details = details.New(issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 		SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
@@ -1838,15 +1904,21 @@ func (m Model) navigateToDependency(issueID string) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderMainView renders the 50/50 split layout.
+// Minimum width percentages for left/right panes during separator drag.
+const (
+	searchMinLeftPct  = 20
+	searchMaxLeftPct  = 80
+	searchMinPaneChar = 20 // Minimum character width for either pane
+)
+
+// renderMainView renders the split layout with draggable separator.
 func (m Model) renderMainView() string {
-	// Calculate widths (small gap between panels)
+	// Calculate widths using dynamic percentage
 	gap := 1
-	leftWidth := m.width / 2
-	rightWidth := m.width - leftWidth - gap
+	leftWidth, rightWidth := m.splitWidths()
 
 	// Left panel: search + results
-	leftPanel := m.renderLeftPanel(leftWidth)
+	leftPanel := zone.Mark(zoneSearchLeft, m.renderLeftPanel(leftWidth))
 
 	// Right panel: details
 	rightPanel := zone.Mark(zoneSearchDetails, m.renderRightPanel(rightWidth))
@@ -2254,9 +2326,24 @@ func (m Model) yankDetailsIssueID() (Model, tea.Cmd) {
 const (
 	zoneSearchInput      = "search:input"
 	zoneSearchDetails    = "search:details"
+	zoneSearchLeft       = "search:left"
 	zoneSearchListPrefix = "search:list:"
 	zoneSearchTreePrefix = "search:tree:"
 )
+
+// splitWidths calculates the left/right pane widths using the dynamic percentage.
+func (m Model) splitWidths() (leftWidth, rightWidth int) {
+	leftWidth = m.width * m.leftWidthPct / 100
+	if leftWidth < searchMinPaneChar {
+		leftWidth = searchMinPaneChar
+	}
+	rightWidth = m.width - leftWidth - 1 // -1 for gap
+	if rightWidth < searchMinPaneChar {
+		rightWidth = searchMinPaneChar
+		leftWidth = m.width - rightWidth - 1
+	}
+	return leftWidth, rightWidth
+}
 
 // makeSearchListZoneID creates a zone ID for an issue in the search results list.
 func makeSearchListZoneID(issueID string) string {
