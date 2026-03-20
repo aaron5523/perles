@@ -1469,3 +1469,286 @@ func TestBoard_MouseClick_PerformanceWithManyIssues(t *testing.T) {
 	require.True(t, ok, "should emit IssueClickedMsg")
 	require.Equal(t, targetIssueID, clickedMsg.IssueID, "correct issue should be clicked")
 }
+
+// --- Mouse Wheel Scroll Tests ---
+
+func TestBoard_MouseWheelDown_MovesSelection(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+				{Name: "Col1", Query: "q1"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(120, 40)
+	m = m.SetFocus(0)
+
+	// Populate column 0 with issues
+	m, _ = m.Update(ColumnLoadedMsg{
+		ViewIndex:   0,
+		ColumnIndex: 0,
+		ColumnTitle: "Col0",
+		Issues: []task.Issue{
+			{ID: "scroll-d-1", TitleText: "First", Priority: task.PriorityHigh, Type: task.TypeTask, Status: task.StatusOpen},
+			{ID: "scroll-d-2", TitleText: "Second", Priority: task.PriorityMedium, Type: task.TypeTask, Status: task.StatusOpen},
+			{ID: "scroll-d-3", TitleText: "Third", Priority: task.PriorityLow, Type: task.TypeTask, Status: task.StatusOpen},
+		},
+	})
+
+	// First issue should be selected initially
+	require.Equal(t, "scroll-d-1", m.SelectedIssue().ID)
+
+	// Scroll wheel down in column 0 (X=10 is within first column of width 60)
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Equal(t, "scroll-d-2", m.SelectedIssue().ID, "cursor should move to second issue")
+
+	// Scroll down again
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Equal(t, "scroll-d-3", m.SelectedIssue().ID, "cursor should move to third issue")
+}
+
+func TestBoard_MouseWheelUp_MovesSelection(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(120, 40)
+	m = m.SetFocus(0)
+
+	m, _ = m.Update(ColumnLoadedMsg{
+		ViewIndex:   0,
+		ColumnIndex: 0,
+		ColumnTitle: "Col0",
+		Issues: []task.Issue{
+			{ID: "scroll-u-1", TitleText: "First", Priority: task.PriorityHigh, Type: task.TypeTask, Status: task.StatusOpen},
+			{ID: "scroll-u-2", TitleText: "Second", Priority: task.PriorityMedium, Type: task.TypeTask, Status: task.StatusOpen},
+		},
+	})
+
+	// Move cursor to second issue via scroll down
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Equal(t, "scroll-u-2", m.SelectedIssue().ID)
+
+	// Scroll up should move back to first issue
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelUp})
+	require.Equal(t, "scroll-u-1", m.SelectedIssue().ID, "cursor should move back to first issue")
+}
+
+func TestBoard_MouseWheel_SwitchesFocus(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+				{Name: "Col1", Query: "q1"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(120, 40)
+	m = m.SetFocus(0) // Focus on first column
+
+	// Populate second column
+	m, _ = m.Update(ColumnLoadedMsg{
+		ViewIndex:   0,
+		ColumnIndex: 1,
+		ColumnTitle: "Col1",
+		Issues: []task.Issue{
+			{ID: "focus-sw-1", TitleText: "Issue in Col1", Priority: task.PriorityHigh, Type: task.TypeTask, Status: task.StatusOpen},
+		},
+	})
+
+	require.Equal(t, 0, m.FocusedColumn(), "precondition: focus on column 0")
+
+	// Scroll in column 1 (X=70, which is in the second column with 120px / 2 = 60px per col)
+	m, _ = m.Update(tea.MouseMsg{X: 70, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Equal(t, 1, m.FocusedColumn(), "focus should switch to column 1 on scroll")
+}
+
+func TestBoard_MouseWheel_OutOfBounds(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(60, 40)
+	m = m.SetFocus(0)
+	originalFocus := m.FocusedColumn()
+
+	// Scroll at X beyond the board width
+	m, cmd := m.Update(tea.MouseMsg{X: 200, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Nil(t, cmd, "scroll out of bounds should produce no command")
+	require.Equal(t, originalFocus, m.FocusedColumn(), "focus should not change")
+}
+
+func TestBoard_MouseWheel_EmptyBoard(t *testing.T) {
+	// Board with no columns
+	m := NewFromViews([]config.ViewConfig{{Name: "Empty", Columns: nil}}, nil, nil)
+	m = m.SetSize(120, 40)
+
+	// Should not panic
+	m, cmd := m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Nil(t, cmd, "scroll on empty board should produce no command")
+}
+
+func TestBoard_MouseWheel_EmptyColumn(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(120, 40)
+	m = m.SetFocus(0)
+
+	// Column with no items loaded — scroll should not crash
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Nil(t, m.SelectedIssue(), "no issue should be selected in empty column")
+}
+
+func TestBoard_MouseWheel_AtBoundary(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(120, 40)
+	m = m.SetFocus(0)
+
+	m, _ = m.Update(ColumnLoadedMsg{
+		ViewIndex:   0,
+		ColumnIndex: 0,
+		ColumnTitle: "Col0",
+		Issues: []task.Issue{
+			{ID: "boundary-1", TitleText: "Only Issue", Priority: task.PriorityHigh, Type: task.TypeTask, Status: task.StatusOpen},
+		},
+	})
+
+	// Scroll up at first item — should stay at first item
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelUp})
+	require.Equal(t, "boundary-1", m.SelectedIssue().ID, "cursor should stay at first item")
+
+	// Scroll down at last item — should stay at last item
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelDown})
+	require.Equal(t, "boundary-1", m.SelectedIssue().ID, "cursor should stay at last item")
+}
+
+func TestBoard_MouseWheel_HorizontalIgnored(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+				{Name: "Col1", Query: "q1"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(120, 40)
+	m = m.SetFocus(0)
+	originalFocus := m.FocusedColumn()
+
+	// WheelLeft and WheelRight should be no-ops (fall through to left-click guard)
+	m, cmd := m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelLeft})
+	require.Nil(t, cmd, "horizontal wheel should produce no command")
+	require.Equal(t, originalFocus, m.FocusedColumn(), "focus should not change on horizontal wheel")
+
+	m, cmd = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelRight})
+	require.Nil(t, cmd, "horizontal wheel should produce no command")
+	require.Equal(t, originalFocus, m.FocusedColumn(), "focus should not change on horizontal wheel")
+}
+
+func TestBoard_ColumnAtX(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+				{Name: "Col1", Query: "q1"},
+				{Name: "Col2", Query: "q2"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(120, 40)
+	// 120 / 3 = 40 per column, no remainder
+	// Col0: [0, 39], Col1: [40, 79], Col2: [80, 119]
+
+	require.Equal(t, 0, m.columnAtX(0), "X=0 should be column 0")
+	require.Equal(t, 0, m.columnAtX(39), "X=39 should be column 0")
+	require.Equal(t, 1, m.columnAtX(40), "X=40 should be column 1")
+	require.Equal(t, 1, m.columnAtX(79), "X=79 should be column 1")
+	require.Equal(t, 2, m.columnAtX(80), "X=80 should be column 2")
+	require.Equal(t, 2, m.columnAtX(119), "X=119 should be column 2")
+	require.Equal(t, 2, m.columnAtX(200), "X=200 should still resolve to last column")
+	require.Equal(t, -1, m.columnAtX(-1), "X=-1 should be out of bounds")
+}
+
+func TestBoard_ColumnAtX_WithOffset(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+				{Name: "Col1", Query: "q1"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(100, 40)
+	m = m.SetXOffset(50) // Board starts at terminal X=50
+	// 100 / 2 = 50 per column
+	// Col0: board-relative [0, 49] = terminal [50, 99]
+	// Col1: board-relative [50, 99] = terminal [100, 149]
+
+	require.Equal(t, -1, m.columnAtX(0), "X=0 should be before board")
+	require.Equal(t, -1, m.columnAtX(49), "X=49 should be before board")
+	require.Equal(t, 0, m.columnAtX(50), "X=50 should be column 0")
+	require.Equal(t, 0, m.columnAtX(99), "X=99 should be column 0")
+	require.Equal(t, 1, m.columnAtX(100), "X=100 should be column 1")
+	require.Equal(t, 1, m.columnAtX(149), "X=149 should be column 1")
+}
+
+func TestBoard_ColumnAtX_WithRemainder(t *testing.T) {
+	views := []config.ViewConfig{
+		{
+			Name: "Test",
+			Columns: []config.ColumnConfig{
+				{Name: "Col0", Query: "q0"},
+				{Name: "Col1", Query: "q1"},
+				{Name: "Col2", Query: "q2"},
+			},
+		},
+	}
+	m := NewFromViews(views, nil, nil)
+	m = m.SetSize(121, 40)
+	// 121 / 3 = 40 base, remainder = 1
+	// Col0: width 40 [0, 39]
+	// Col1: width 40 [40, 79]
+	// Col2: width 41 [80, 120] (gets the extra pixel)
+
+	require.Equal(t, 0, m.columnAtX(0), "X=0 should be column 0")
+	require.Equal(t, 0, m.columnAtX(39), "X=39 should be column 0")
+	require.Equal(t, 1, m.columnAtX(40), "X=40 should be column 1")
+	require.Equal(t, 2, m.columnAtX(80), "X=80 should be column 2")
+	require.Equal(t, 2, m.columnAtX(120), "X=120 should be column 2 (extra width)")
+}

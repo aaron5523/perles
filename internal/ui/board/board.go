@@ -60,6 +60,14 @@ type Model struct {
 	// boardFocused controls whether the selected column is visually highlighted.
 	// When false (e.g., chat panel has focus), no column border is highlighted.
 	boardFocused bool
+
+	// xOffset is the board's left X position in absolute terminal coordinates.
+	// Used to convert mouse X coordinates to board-relative positions.
+	xOffset int
+
+	// columnOffsets stores the X start position of each column, populated by SetSize.
+	// Used by columnAtX to determine which column the mouse is hovering over.
+	columnOffsets []int
 }
 
 // NewFromViews creates a board from multiple view configurations.
@@ -140,15 +148,42 @@ func (m Model) SetSize(width, height int) Model {
 	remainder := width % colCount
 	contentHeight := height
 
+	m.columnOffsets = make([]int, colCount)
+	accX := 0
 	for i := range m.columns {
+		m.columnOffsets[i] = accX
 		colWidth := baseWidth
 		// Give extra width to the last 'remainder' columns
 		if i >= colCount-remainder {
 			colWidth++
 		}
 		m.columns[i] = m.columns[i].SetSize(colWidth, contentHeight)
+		accX += colWidth
 	}
 	return m
+}
+
+// SetXOffset sets the board's left X position in absolute terminal coordinates.
+// This is used to convert mouse X coordinates to board-relative positions for
+// scroll wheel column detection.
+func (m Model) SetXOffset(offset int) Model {
+	m.xOffset = offset
+	return m
+}
+
+// columnAtX returns the column index at the given terminal X coordinate.
+// Returns -1 if X is out of bounds or there are no columns.
+func (m Model) columnAtX(termX int) int {
+	x := termX - m.xOffset
+	if x < 0 || len(m.columnOffsets) == 0 {
+		return -1
+	}
+	for i := len(m.columnOffsets) - 1; i >= 0; i-- {
+		if x >= m.columnOffsets[i] {
+			return i
+		}
+	}
+	return -1
 }
 
 // SetShowCounts sets whether to display counts in column titles.
@@ -443,6 +478,26 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseMsg:
+		// Handle scroll wheel events first (before left-click guard).
+		// Synthesized KeyMsg delegates to column's existing Up/Down navigation —
+		// columns must handle "up"/"down" key strings for this to work.
+		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+			colIdx := m.columnAtX(msg.X)
+			if colIdx < 0 || colIdx >= len(m.columns) {
+				return m, nil
+			}
+			m.focused = colIdx
+			var keyMsg tea.KeyMsg
+			if msg.Button == tea.MouseButtonWheelUp {
+				keyMsg = tea.KeyMsg{Type: tea.KeyUp}
+			} else {
+				keyMsg = tea.KeyMsg{Type: tea.KeyDown}
+			}
+			col, cmd := m.columns[colIdx].Update(keyMsg)
+			m.columns[colIdx] = col
+			return m, cmd
+		}
+
 		// Only handle left-click release events
 		if msg.Button != tea.MouseButtonLeft || msg.Action != tea.MouseActionRelease {
 			return m, nil
