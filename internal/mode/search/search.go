@@ -545,17 +545,17 @@ func (m Model) handleEnter(msg EnterMsg) (Model, tea.Cmd) {
 
 // SetSize handles terminal resize.
 func (m Model) SetSize(width, height int) Model {
+	// Cancel drag only on actual terminal resize (not internal layout recalcs)
+	if width != m.width || height != m.height {
+		m.separatorDragging = false
+	}
+
 	m.width = width
 	m.height = height
 
 	// Guard against zero dimensions
 	if width == 0 || height == 0 {
 		return m
-	}
-
-	// Cancel drag only on actual terminal resize (not internal layout recalcs)
-	if width != m.width || height != m.height {
-		m.separatorDragging = false
 	}
 
 	// Calculate split using dynamic percentage
