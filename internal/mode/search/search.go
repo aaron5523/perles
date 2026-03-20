@@ -743,6 +743,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			func() tea.Msg { return mode.ShowToastMsg{Message: toastMsg, Style: toaster.StyleSuccess} },
 		)
 
+	case details.CopyIDMsg:
+		if err := m.services.Clipboard.Copy(msg.IssueID); err != nil {
+			return m, func() tea.Msg {
+				return mode.ShowToastMsg{Message: "Clipboard error: " + err.Error(), Style: toaster.StyleError}
+			}
+		}
+		return m, func() tea.Msg { return mode.ShowToastMsg{Message: "Copied: " + msg.IssueID, Style: toaster.StyleSuccess} }
+
 	case details.DeleteIssueMsg:
 		return m.openDeleteConfirm(msg)
 
@@ -1347,8 +1355,16 @@ func (m Model) handleMouseClick(msg tea.MouseMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Click on details panel focuses it
+	// Click on details panel — check clickable zones first, then focus
 	if z := zone.Get(zoneSearchDetails); z != nil && z.InBounds(msg) {
+		// Forward click to details to check its clickable ID zones
+		var cmd tea.Cmd
+		m.details, cmd = m.details.Update(msg)
+		if cmd != nil {
+			m.focus = FocusDetails
+			m.input.Blur()
+			return m, cmd
+		}
 		m.focus = FocusDetails
 		m.input.Blur()
 		return m, nil

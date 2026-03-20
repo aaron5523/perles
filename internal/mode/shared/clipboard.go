@@ -22,20 +22,21 @@ type SystemClipboard struct{}
 
 // Copy copies text to the system clipboard.
 // Priority:
-// 1. Local tmux session → use native clipboard tools directly
-// 2. Remote SSH session → use OSC 52 escape sequences
-// 3. GNU screen → use OSC 52 escape sequences
-// 4. Bare local terminal → use native clipboard tools directly
+// 1. Remote SSH session or GNU screen → use OSC 52 escape sequences
+// 2. Native clipboard tools (pbcopy, xclip, xsel, wl-copy)
+// 3. Fallback to OSC 52 if native tools unavailable (e.g. containers)
 func (SystemClipboard) Copy(text string) error {
-	if isLocalTmux() {
-		return copyViaNative(text)
-	}
-
 	if isRemoteSession() || isGNUScreen() {
 		return copyViaOSC52(text)
 	}
 
-	return copyViaNative(text)
+	if err := copyViaNative(text); err != nil {
+		// Native clipboard unavailable — fall back to OSC 52.
+		// Most modern terminals (iTerm2, WezTerm, Ghostty, Windows Terminal)
+		// support OSC 52 clipboard setting.
+		return copyViaOSC52(text)
+	}
+	return nil
 }
 
 // isLocalTmux returns true if running in tmux without SSH.
