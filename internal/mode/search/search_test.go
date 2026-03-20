@@ -2623,3 +2623,178 @@ func TestSearch_SaveMsg_UpdatesNotesWhenChanged(t *testing.T) {
 	// Execute the command to trigger UpdateIssue
 	cmd()
 }
+
+// === Unit Tests: splitWidths ===
+
+func TestSplitWidths_DefaultPercentage(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 200
+	m.leftWidthPct = 50
+
+	left, right := m.splitWidths()
+	require.Equal(t, 100, left)
+	require.Equal(t, 99, right) // 200 - 100 - 1 gap
+}
+
+func TestSplitWidths_CustomPercentage(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 200
+	m.leftWidthPct = 30
+
+	left, right := m.splitWidths()
+	require.Equal(t, 60, left)
+	require.Equal(t, 139, right) // 200 - 60 - 1
+}
+
+func TestSplitWidths_ZeroWidth(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 0
+	m.leftWidthPct = 50
+
+	left, right := m.splitWidths()
+	require.Equal(t, 0, left)
+	require.Equal(t, 0, right)
+}
+
+func TestSplitWidths_NarrowWidth_ClampsToMinimum(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 30
+	m.leftWidthPct = 50
+
+	left, right := m.splitWidths()
+	// leftWidth = 30 * 50 / 100 = 15, clamped to 20
+	// rightWidth = 30 - 20 - 1 = 9, clamped to 20
+	// leftWidth = 30 - 20 - 1 = 9
+	require.Equal(t, 9, left)
+	require.Equal(t, 20, right)
+}
+
+func TestSplitWidths_NegativeWidth(t *testing.T) {
+	m := createTestModel(t)
+	m.width = -10
+	m.leftWidthPct = 50
+
+	left, right := m.splitWidths()
+	require.Equal(t, 0, left)
+	require.Equal(t, 0, right)
+}
+
+func TestSplitWidths_LeftClamped(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 200
+	m.leftWidthPct = 5 // 5% of 200 = 10, below searchMinPaneChar
+
+	left, right := m.splitWidths()
+	require.Equal(t, searchMinPaneChar, left)
+	require.Equal(t, 200-searchMinPaneChar-1, right)
+}
+
+// === Unit Tests: handleSeparatorDrag ===
+
+func TestHandleSeparatorDrag_ReleaseStopsDrag(t *testing.T) {
+	m := createTestModel(t)
+	m.separatorDragging = true
+
+	result, cmd, handled := m.handleSeparatorDrag(tea.MouseMsg{
+		Action: tea.MouseActionRelease,
+	})
+	require.True(t, handled)
+	require.Nil(t, cmd)
+	require.False(t, result.separatorDragging)
+}
+
+func TestHandleSeparatorDrag_ReleaseIgnoredWhenNotDragging(t *testing.T) {
+	m := createTestModel(t)
+	m.separatorDragging = false
+
+	_, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+		Action: tea.MouseActionRelease,
+	})
+	require.False(t, handled)
+}
+
+func TestHandleSeparatorDrag_MotionUpdatesPct(t *testing.T) {
+	m := createTestModel(t)
+	m.separatorDragging = true
+	m.width = 200
+
+	result, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+		X:      120,
+		Action: tea.MouseActionMotion,
+	})
+	require.True(t, handled)
+	require.Equal(t, 60, result.leftWidthPct) // 120 * 100 / 200
+	require.True(t, result.separatorDragging, "should remain dragging after motion")
+}
+
+func TestHandleSeparatorDrag_MotionClampsToMin(t *testing.T) {
+	m := createTestModel(t)
+	m.separatorDragging = true
+	m.width = 200
+
+	result, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+		X:      10, // 10 * 100 / 200 = 5, below searchMinLeftPct (20)
+		Action: tea.MouseActionMotion,
+	})
+	require.True(t, handled)
+	require.Equal(t, searchMinLeftPct, result.leftWidthPct)
+}
+
+func TestHandleSeparatorDrag_MotionClampsToMax(t *testing.T) {
+	m := createTestModel(t)
+	m.separatorDragging = true
+	m.width = 200
+
+	result, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+		X:      190, // 190 * 100 / 200 = 95, above searchMaxLeftPct (80)
+		Action: tea.MouseActionMotion,
+	})
+	require.True(t, handled)
+	require.Equal(t, searchMaxLeftPct, result.leftWidthPct)
+}
+
+func TestHandleSeparatorDrag_MotionIgnoredWhenNotDragging(t *testing.T) {
+	m := createTestModel(t)
+	m.separatorDragging = false
+
+	_, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+		X:      100,
+		Action: tea.MouseActionMotion,
+	})
+	require.False(t, handled)
+}
+
+func TestHandleSeparatorDrag_PressOutsideHitZone(t *testing.T) {
+	m := createTestModel(t)
+
+	// Press far from any possible separator position
+	_, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+		X:      0,
+		Y:      0,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	require.False(t, handled)
+}
+
+// === Unit Tests: SetSize drag cancellation ===
+
+func TestSetSize_CancelsDragOnDimensionChange(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 100
+	m.height = 40
+	m.separatorDragging = true
+
+	m = m.SetSize(120, 40) // Width changed
+	require.False(t, m.separatorDragging, "drag should be cancelled when width changes")
+}
+
+func TestSetSize_PreservesDragOnSameDimensions(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 100
+	m.height = 40
+	m.separatorDragging = true
+
+	m = m.SetSize(100, 40) // Same dimensions
+	require.True(t, m.separatorDragging, "drag should be preserved when dimensions unchanged")
+}

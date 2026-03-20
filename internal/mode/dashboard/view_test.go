@@ -425,3 +425,53 @@ func TestView_IssueEditorOverlay_ReturnsNormalViewWhenNil(t *testing.T) {
 	// Should render normal dashboard content (workflow table area)
 	require.NotEmpty(t, view, "view should render something")
 }
+
+// === Unit Tests: calculateEpicTreeLayout with dynamic percentage ===
+
+func TestCalculateEpicTreeLayout_DefaultPercentage(t *testing.T) {
+	layout := calculateEpicTreeLayout(200, 45)
+	require.True(t, layout.showDetails)
+	require.Equal(t, 90, layout.treeWidth)   // 200 * 45 / 100
+	require.Equal(t, 110, layout.detailsWidth) // 200 - 90
+}
+
+func TestCalculateEpicTreeLayout_CustomPercentage(t *testing.T) {
+	layout := calculateEpicTreeLayout(200, 30)
+	require.True(t, layout.showDetails)
+	require.Equal(t, 60, layout.treeWidth)
+	require.Equal(t, 140, layout.detailsWidth)
+}
+
+func TestCalculateEpicTreeLayout_NarrowWidth_NoDetails(t *testing.T) {
+	layout := calculateEpicTreeLayout(60, 45) // Below minWidthForDetails (80)
+	require.False(t, layout.showDetails)
+	require.Equal(t, 60, layout.treeWidth)
+	require.Equal(t, 0, layout.detailsWidth)
+}
+
+func TestCalculateEpicTreeLayout_TreeClampsToMinimum(t *testing.T) {
+	// Very low percentage on a 100-wide layout: 5% = 5, below epicTreeMinWidth (20)
+	layout := calculateEpicTreeLayout(100, 5)
+	require.True(t, layout.showDetails)
+	require.Equal(t, epicTreeMinWidth, layout.treeWidth)
+	require.Equal(t, 100-epicTreeMinWidth, layout.detailsWidth)
+}
+
+func TestCalculateEpicTreeLayout_DetailsClampsToMinimum(t *testing.T) {
+	// Very high percentage on a 100-wide layout: 95% = 95, details = 5, below epicDetailsMinWidth (20)
+	layout := calculateEpicTreeLayout(100, 95)
+	require.True(t, layout.showDetails)
+	require.Equal(t, epicDetailsMinWidth, layout.detailsWidth)
+	require.Equal(t, 100-epicDetailsMinWidth, layout.treeWidth)
+}
+
+func TestCalculateEpicTreeLayout_PercentageRanges(t *testing.T) {
+	// Verify various percentages produce valid layouts
+	for pct := 15; pct <= 85; pct += 5 {
+		layout := calculateEpicTreeLayout(200, pct)
+		require.True(t, layout.showDetails, "should show details at pct=%d", pct)
+		require.GreaterOrEqual(t, layout.treeWidth, epicTreeMinWidth, "tree too narrow at pct=%d", pct)
+		require.GreaterOrEqual(t, layout.detailsWidth, epicDetailsMinWidth, "details too narrow at pct=%d", pct)
+		require.Equal(t, 200, layout.treeWidth+layout.detailsWidth, "widths should sum to available at pct=%d", pct)
+	}
+}
