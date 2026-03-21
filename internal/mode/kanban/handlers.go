@@ -12,6 +12,7 @@ import (
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
 	"github.com/zjrosen/perles/internal/task"
+	"github.com/zjrosen/perles/internal/ui/board"
 	"github.com/zjrosen/perles/internal/ui/coleditor"
 	"github.com/zjrosen/perles/internal/ui/details"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
@@ -325,11 +326,9 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 		// Determine pre-selection based on current sort override
 		col := m.board.Column(focusedCol)
-		sortOptions := []picker.Option{
-			{Label: "Priority", Value: "priority"},
-			{Label: "Created", Value: "created"},
-			{Label: "Updated", Value: "updated"},
-			{Label: "Title", Value: "title"},
+		sortOptions := make([]picker.Option, len(board.SortFields))
+		for i, sf := range board.SortFields {
+			sortOptions[i] = picker.Option{Label: sf.Label, Value: sf.Field}
 		}
 		selected := -1
 		for i, opt := range sortOptions {

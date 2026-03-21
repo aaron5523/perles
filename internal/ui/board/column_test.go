@@ -353,11 +353,21 @@ func TestColumn_SortOverride_SetAndClear(t *testing.T) {
 	require.True(t, c.HasSortOverride())
 	require.Equal(t, "updated", c.SortField())
 	require.True(t, c.SortDesc())
+}
 
-	c = c.ClearSortOverride()
-	require.False(t, c.HasSortOverride())
-	require.Equal(t, "", c.SortField())
+func TestColumn_SetSortOverride_RejectsInvalidField(t *testing.T) {
+	c := NewColumn("Test")
+	c = c.SetSortOverride("priority", false)
+	require.True(t, c.HasSortOverride())
+
+	// Invalid field is ignored — sort override unchanged
+	c = c.SetSortOverride("nonexistent", true)
+	require.Equal(t, "priority", c.SortField())
 	require.False(t, c.SortDesc())
+
+	// Empty string is also rejected
+	c = c.SetSortOverride("", false)
+	require.Equal(t, "priority", c.SortField())
 }
 
 func TestColumn_Title_WithSortIndicator(t *testing.T) {
@@ -432,8 +442,8 @@ func TestSortFieldAbbrev(t *testing.T) {
 		{"updated", "Upd"},
 		{"created", "Cre"},
 		{"title", "Ttl"},
-		{"status", "sta"},
-		{"ab", "ab"},
+		{"status", "???"},
+		{"ab", "???"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.field, func(t *testing.T) {

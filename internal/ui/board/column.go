@@ -195,6 +195,32 @@ func NewColumnWithExecutor(title string, query string, executor task.QueryExecut
 	return col
 }
 
+// SortFieldDef defines a sortable field with its BQL name, display label, and abbreviation.
+type SortFieldDef struct {
+	Field  string // BQL field name (e.g., "priority")
+	Label  string // Display label for picker (e.g., "Priority")
+	Abbrev string // 3-char abbreviation for header indicator (e.g., "Pri")
+}
+
+// SortFields is the canonical list of fields available for column sorting.
+// Used by the sort picker, compareByField, and sortIndicator.
+var SortFields = []SortFieldDef{
+	{Field: "priority", Label: "Priority", Abbrev: "Pri"},
+	{Field: "created", Label: "Created", Abbrev: "Cre"},
+	{Field: "updated", Label: "Updated", Abbrev: "Upd"},
+	{Field: "title", Label: "Title", Abbrev: "Ttl"},
+}
+
+// isValidSortField returns true if field is in SortFields.
+func isValidSortField(field string) bool {
+	for _, sf := range SortFields {
+		if sf.Field == field {
+			return true
+		}
+	}
+	return false
+}
+
 // ColumnLoadedMsg is sent when a column finishes loading its issues.
 type ColumnLoadedMsg struct {
 	ViewIndex   int          // which view this column belongs to
@@ -208,6 +234,10 @@ type ColumnLoadedMsg struct {
 // If the user has set a sort override, it takes precedence.
 // If the query has no explicit ORDER BY and no user override, priority ASC is applied as default.
 // If the query has an explicit ORDER BY and no user override, the query is left unchanged.
+//
+// Note: This provides SQL-level ordering. sortIssues() applies a second in-memory stable sort
+// with the same field to add a natural-ID tiebreaker (e.g., bd-5.1 < bd-5.2 < bd-5.10) that
+// SQL cannot express. Both layers are intentional — see sortIssues() for details.
 func (c Column) effectiveQuery() string {
 	query := c.query
 
@@ -237,6 +267,10 @@ func (c Column) effectiveQuery() string {
 // sortIssues applies an in-memory stable sort using the column's sort field
 // with natural ID as tiebreaker. This ensures deterministic ordering when
 // multiple issues share the same sort-field value.
+//
+// This is intentionally a second sort after SQL ORDER BY (see effectiveQuery).
+// SQL provides primary ordering; this adds the natural-ID tiebreaker that SQL
+// cannot express (e.g., "bd-5.2" before "bd-5.10" instead of lexicographic order).
 func (c Column) sortIssues(issues []task.Issue) {
 	if len(issues) <= 1 {
 		return
@@ -472,17 +506,14 @@ func (c Column) SetShowCounts(show bool) BoardColumn {
 }
 
 // SetSortOverride sets the sort override for this column.
+// Only accepts fields defined in SortFields; unknown fields are ignored.
 // Returns a new Column with the override applied.
 func (c Column) SetSortOverride(field string, desc bool) Column {
+	if !isValidSortField(field) {
+		return c
+	}
 	c.sortField = field
 	c.sortDesc = desc
-	return c
-}
-
-// ClearSortOverride removes the sort override.
-func (c Column) ClearSortOverride() Column {
-	c.sortField = ""
-	c.sortDesc = false
 	return c
 }
 
@@ -572,22 +603,14 @@ func (c Column) sortIndicator() string {
 }
 
 // sortFieldAbbrev returns a 3-character abbreviation for a BQL sort field.
+// Uses the canonical SortFields definitions.
 func sortFieldAbbrev(field string) string {
-	switch field {
-	case "priority":
-		return "Pri"
-	case "updated":
-		return "Upd"
-	case "created":
-		return "Cre"
-	case "title":
-		return "Ttl"
-	default:
-		if len(field) >= 3 {
-			return field[:3]
+	for _, sf := range SortFields {
+		if sf.Field == field {
+			return sf.Abbrev
 		}
-		return field
 	}
+	return "???"
 }
 
 // RightTitle returns an optional right-aligned title.
