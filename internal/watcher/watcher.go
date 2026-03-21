@@ -1,4 +1,6 @@
-// Package watcher provides file system watching with debouncing for backend data stores.
+// Package watcher provides change detection for backend data stores.
+// It supports two modes: filesystem watching (fsnotify) for SQLite backends,
+// and polling for backends like Dolt where filesystem events are unreliable.
 package watcher
 
 import (
@@ -9,9 +11,12 @@ import (
 
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/pubsub"
+	"github.com/zjrosen/perles/internal/task"
 
 	"github.com/fsnotify/fsnotify"
 )
+
+const defaultPollInterval = 2 * time.Second
 
 // WatcherEventType identifies the kind of watcher event.
 type WatcherEventType string
@@ -30,11 +35,15 @@ type WatcherEvent struct {
 }
 
 // Watcher monitors a backend data store for changes and publishes events via broker.
+// It supports two modes: fsnotify-based (for SQLite) and polling-based (for Dolt).
 type Watcher struct {
-	fsWatcher     *fsnotify.Watcher
+	fsWatcher     *fsnotify.Watcher // nil in poll mode
 	dbPath        string
 	relevantFiles []string // Base filenames that trigger a refresh (e.g. "beads.db", "beads.db-wal")
 	debounce      time.Duration
+	mode          task.WatcherMode
+	pollInterval  time.Duration
+	pollFunc      func() (string, error)
 	done          chan struct{}
 	broker        *pubsub.Broker[WatcherEvent]
 }
@@ -42,7 +51,7 @@ type Watcher struct {
 // Config holds watcher configuration options.
 type Config struct {
 	// DBPath is the path to the data store file/directory. The watcher watches
-	// the parent directory of this path for filesystem events.
+	// the parent directory of this path for filesystem events (FS mode only).
 	DBPath string
 
 	// DebounceDur is how long to wait after the last filesystem event before
@@ -54,25 +63,67 @@ type Config struct {
 	// for SQLite, or ["last-touched"] for Dolt sentinel-based watching.
 	// If empty, all write/create events in the watched directory trigger a refresh.
 	RelevantFiles []string
+
+	// Mode selects the change detection strategy. Empty defaults to FS mode.
+	Mode task.WatcherMode
+
+	// PollInterval is how often to call PollFunc in poll mode.
+	// Zero defaults to 2 seconds. Ignored in FS mode.
+	PollInterval time.Duration
+
+	// PollFunc returns a state hash for the data store. The watcher calls this
+	// periodically and publishes DBChanged when the hash changes. Required
+	// when Mode is WatcherModePoll; ignored in FS mode.
+	PollFunc func() (string, error)
 }
 
 // New creates a new database watcher.
 func New(cfg Config) (*Watcher, error) {
-	log.Debug(log.CatWatcher, "Creating watcher", "dbPath", cfg.DBPath, "debounce", cfg.DebounceDur)
+	mode := cfg.Mode
+	if mode == "" {
+		mode = task.WatcherModeFS
+	}
+
+	w := &Watcher{
+		dbPath:        cfg.DBPath,
+		relevantFiles: cfg.RelevantFiles,
+		debounce:      cfg.DebounceDur,
+		mode:          mode,
+		pollInterval:  cfg.PollInterval,
+		pollFunc:      cfg.PollFunc,
+		done:          make(chan struct{}),
+		broker:        pubsub.NewBroker[WatcherEvent](),
+	}
+
+	// Poll mode: no fsnotify watcher needed
+	if mode == task.WatcherModePoll && cfg.PollFunc != nil {
+		log.Debug(log.CatWatcher, "Creating poll-mode watcher", "interval", w.effectivePollInterval())
+		return w, nil
+	}
+
+	// FS mode (or poll mode without PollFunc — fall back to fsnotify)
+	if mode == task.WatcherModePoll && cfg.PollFunc == nil {
+		log.Warn(log.CatWatcher, "Poll mode requested but PollFunc is nil, falling back to FS mode")
+		w.mode = task.WatcherModeFS
+	}
+
+	log.Debug(log.CatWatcher, "Creating FS-mode watcher", "dbPath", cfg.DBPath, "debounce", cfg.DebounceDur)
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.ErrorErr(log.CatWatcher, "Failed to create fsnotify watcher", err)
 		return nil, fmt.Errorf("creating fsnotify watcher: %w", err)
 	}
+	w.fsWatcher = fsw
 
-	return &Watcher{
-		fsWatcher:     fsw,
-		dbPath:        cfg.DBPath,
-		relevantFiles: cfg.RelevantFiles,
-		debounce:      cfg.DebounceDur,
-		done:          make(chan struct{}),
-		broker:        pubsub.NewBroker[WatcherEvent](),
-	}, nil
+	return w, nil
+}
+
+// effectivePollInterval returns the poll interval, applying the default if zero.
+func (w *Watcher) effectivePollInterval() time.Duration {
+	if w.pollInterval <= 0 {
+		return defaultPollInterval
+	}
+	return w.pollInterval
 }
 
 // watchDir returns the directory to watch.
@@ -81,9 +132,16 @@ func (w *Watcher) watchDir() string {
 	return filepath.Dir(w.dbPath)
 }
 
-// Start begins watching the database directory.
-// Subscribe to watcher events using Broker().Subscribe(ctx) instead of the old channel return.
+// Start begins watching for data store changes.
+// In FS mode, it watches the parent directory of DBPath via fsnotify.
+// In poll mode, it starts a polling goroutine that calls PollFunc periodically.
 func (w *Watcher) Start() error {
+	if w.mode == task.WatcherModePoll {
+		log.Info(log.CatWatcher, "Started polling", "interval", w.effectivePollInterval())
+		go w.pollLoop()
+		return nil
+	}
+
 	dir := w.watchDir()
 	if err := w.fsWatcher.Add(dir); err != nil {
 		log.ErrorErr(log.CatWatcher, "Failed to watch directory", err, "dir", dir)
@@ -104,7 +162,10 @@ func (w *Watcher) Stop() error {
 	log.Debug(log.CatWatcher, "Stopping watcher")
 	close(w.done)
 	w.broker.Close() // Close broker first to notify subscribers
-	return w.fsWatcher.Close()
+	if w.fsWatcher != nil {
+		return w.fsWatcher.Close()
+	}
+	return nil
 }
 
 // Broker returns the pub/sub broker for subscribing to watcher events.
@@ -182,6 +243,44 @@ func (w *Watcher) loop() {
 			if timer != nil {
 				timer.Stop()
 			}
+			return
+		}
+	}
+}
+
+// pollLoop periodically calls pollFunc and publishes DBChanged when the hash changes.
+// The poll interval acts as a natural rate limiter — no debouncing needed.
+func (w *Watcher) pollLoop() {
+	ticker := time.NewTicker(w.effectivePollInterval())
+	defer ticker.Stop()
+
+	var lastHash string
+
+	for {
+		select {
+		case <-ticker.C:
+			hash, err := w.pollFunc()
+			if err != nil {
+				log.ErrorErr(log.CatWatcher, "Poll function error", err)
+				continue
+			}
+
+			if lastHash == "" {
+				// First poll — establish baseline, don't publish
+				lastHash = hash
+				log.Debug(log.CatWatcher, "Poll baseline established", "hash", hash)
+				continue
+			}
+
+			if hash != lastHash {
+				lastHash = hash
+				log.Debug(log.CatWatcher, "Poll detected change", "hash", hash)
+				w.broker.Publish(pubsub.UpdatedEvent, WatcherEvent{
+					Type: DBChanged,
+				})
+			}
+
+		case <-w.done:
 			return
 		}
 	}
