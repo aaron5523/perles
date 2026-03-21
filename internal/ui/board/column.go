@@ -6,6 +6,7 @@ import (
 
 	zone "github.com/lrstanley/bubblezone"
 
+	"github.com/zjrosen/perles/internal/beads/bql"
 	"github.com/zjrosen/perles/internal/mode/shared"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/issuebadge"
@@ -153,6 +154,10 @@ type Column struct {
 	executor  task.QueryExecutor // BQL executor for loading issues
 	query     string             // BQL query for this column
 	loadError error              // error from last load attempt
+
+	// Sort override fields (ephemeral, not persisted)
+	sortField string // BQL field name for sort override ("" = no override)
+	sortDesc  bool   // true for DESC, false for ASC
 }
 
 // NewColumn creates a new column.
@@ -196,6 +201,33 @@ type ColumnLoadedMsg struct {
 	Err         error        // error if load failed
 }
 
+// effectiveQuery returns the BQL query with sort override or column-level default applied.
+// If the user has set a sort override, it takes precedence.
+// If the query has no explicit ORDER BY and no user override, priority ASC is applied as default.
+// If the query has an explicit ORDER BY and no user override, the query is left unchanged.
+func (c Column) effectiveQuery() string {
+	query := c.query
+
+	if c.sortField != "" {
+		// User override: strip any existing ORDER BY and append the override
+		dir := " asc"
+		if c.sortDesc {
+			dir = " desc"
+		}
+		if bql.HasOrderBy(query) {
+			query = bql.StripOrderBy(query)
+		}
+		return query + " order by " + c.sortField + dir
+	}
+
+	// No user override: apply column-level default only if query lacks ORDER BY
+	if !bql.HasOrderBy(query) {
+		return query + " order by priority"
+	}
+
+	return query
+}
+
 // LoadIssues executes the BQL query and returns the column with loaded issues.
 // This is a synchronous operation - for async loading, use LoadIssuesCmd().
 func (c Column) LoadIssues() Column {
@@ -203,7 +235,7 @@ func (c Column) LoadIssues() Column {
 		return c
 	}
 
-	issues, err := c.executor.Execute(c.query)
+	issues, err := c.executor.Execute(c.effectiveQuery())
 	if err != nil {
 		c.loadError = err
 		return c
@@ -227,9 +259,9 @@ func (c Column) LoadCmd(viewIndex, columnIndex int) tea.Cmd {
 		return nil
 	}
 
-	// Capture values for closure
+	// Capture values for closure (use effectiveQuery for sort override support)
 	executor := c.executor
-	query := c.query
+	query := c.effectiveQuery()
 	title := c.title
 
 	return func() tea.Msg {
@@ -382,6 +414,36 @@ func (c Column) SetShowCounts(show bool) BoardColumn {
 	}
 	*c.showCounts = show
 	return c
+}
+
+// SetSortOverride sets the sort override for this column.
+// Returns a new Column with the override applied.
+func (c Column) SetSortOverride(field string, desc bool) Column {
+	c.sortField = field
+	c.sortDesc = desc
+	return c
+}
+
+// ClearSortOverride removes the sort override.
+func (c Column) ClearSortOverride() Column {
+	c.sortField = ""
+	c.sortDesc = false
+	return c
+}
+
+// HasSortOverride returns true if the column has a user-initiated sort override.
+func (c Column) HasSortOverride() bool {
+	return c.sortField != ""
+}
+
+// SortField returns the current sort override field ("" if none).
+func (c Column) SortField() string {
+	return c.sortField
+}
+
+// SortDesc returns whether the sort override is descending.
+func (c Column) SortDesc() bool {
+	return c.sortDesc
 }
 
 // SelectedItem returns the currently selected issue.

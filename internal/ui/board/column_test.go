@@ -333,3 +333,102 @@ func TestColumnLoadedMsg_WithError(t *testing.T) {
 	require.Nil(t, msg.Issues)
 	require.Error(t, msg.Err)
 }
+
+// --- Sort override tests ---
+
+func TestColumn_SortOverride_SetAndClear(t *testing.T) {
+	c := NewColumn("Test")
+	require.False(t, c.HasSortOverride())
+	require.Equal(t, "", c.SortField())
+	require.False(t, c.SortDesc())
+
+	c = c.SetSortOverride("priority", false)
+	require.True(t, c.HasSortOverride())
+	require.Equal(t, "priority", c.SortField())
+	require.False(t, c.SortDesc())
+
+	c = c.SetSortOverride("updated", true)
+	require.True(t, c.HasSortOverride())
+	require.Equal(t, "updated", c.SortField())
+	require.True(t, c.SortDesc())
+
+	c = c.ClearSortOverride()
+	require.False(t, c.HasSortOverride())
+	require.Equal(t, "", c.SortField())
+	require.False(t, c.SortDesc())
+}
+
+func TestColumn_effectiveQuery(t *testing.T) {
+	tests := []struct {
+		name      string
+		query     string
+		sortField string
+		sortDesc  bool
+		want      string
+	}{
+		{
+			name:  "no ORDER BY, no override: appends default priority",
+			query: "type = bug",
+			want:  "type = bug order by priority",
+		},
+		{
+			name:      "no ORDER BY, with override ASC: appends override",
+			query:     "type = bug",
+			sortField: "created",
+			want:      "type = bug order by created asc",
+		},
+		{
+			name:      "no ORDER BY, with override DESC: appends override",
+			query:     "status = open",
+			sortField: "updated",
+			sortDesc:  true,
+			want:      "status = open order by updated desc",
+		},
+		{
+			name:  "explicit ORDER BY, no override: returns unchanged",
+			query: "type = bug order by created desc",
+			want:  "type = bug order by created desc",
+		},
+		{
+			name:      "explicit ORDER BY, with override: strips and appends",
+			query:     "type = bug order by created desc",
+			sortField: "priority",
+			want:      "type = bug order by priority asc",
+		},
+		{
+			name:      "EXPAND + ORDER BY, with override: strips ORDER BY, preserves EXPAND",
+			query:     "type = epic expand down depth 2 order by updated desc",
+			sortField: "priority",
+			want:      "type = epic expand down depth 2 order by priority asc",
+		},
+		{
+			name:  "EXPAND, no ORDER BY, no override: appends default",
+			query: "type = bug expand down",
+			want:  "type = bug expand down order by priority",
+		},
+		{
+			name:      "ORDER BY only, with override: replaces",
+			query:     "order by updated desc",
+			sortField: "title",
+			want:      " order by title asc",
+		},
+		{
+			name:      "case insensitive ORDER BY, with override: strips correctly",
+			query:     "type = bug ORDER BY created DESC",
+			sortField: "priority",
+			want:      "type = bug order by priority asc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewColumn("Test")
+			c.query = tt.query
+			if tt.sortField != "" {
+				c = c.SetSortOverride(tt.sortField, tt.sortDesc)
+			}
+			got := c.effectiveQuery()
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
