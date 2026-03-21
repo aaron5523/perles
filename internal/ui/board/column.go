@@ -209,19 +209,19 @@ func (c Column) effectiveQuery() string {
 	query := c.query
 
 	if c.sortField != "" {
-		// User override: strip any existing ORDER BY and append the override
+		// User override: strip any existing ORDER BY and append the override.
+		// StripOrderBy returns the input unchanged when no ORDER BY exists.
 		dir := " asc"
 		if c.sortDesc {
 			dir = " desc"
 		}
-		if bql.HasOrderBy(query) {
-			query = bql.StripOrderBy(query)
-		}
+		query = bql.StripOrderBy(query)
 		return query + " order by " + c.sortField + dir
 	}
 
-	// No user override: apply column-level default only if query lacks ORDER BY
-	if !bql.HasOrderBy(query) {
+	// No user override: apply column-level default only if query lacks ORDER BY.
+	// If StripOrderBy returns the same string, there is no ORDER BY to preserve.
+	if bql.StripOrderBy(query) == query {
 		return query + " order by priority"
 	}
 
