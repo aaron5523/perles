@@ -167,6 +167,9 @@ func NewWithConfig(appCfg AppConfig) (Model, error) {
 			DBPath:        dbPath,
 			DebounceDur:   debounceDur,
 			RelevantFiles: watcherCfg.RelevantFiles,
+			Mode:          watcherCfg.Mode,
+			PollInterval:  watcherCfg.PollInterval,
+			PollFunc:      watcherCfg.PollFunc,
 		})
 		if err == nil {
 			if err := w.Start(); err == nil {

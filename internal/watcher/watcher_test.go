@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/zjrosen/perles/internal/pubsub"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/watcher"
 )
 
@@ -681,4 +682,149 @@ func TestDolt_DebounceLastTouchedWrites(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 		// Expected
 	}
+}
+
+// =============================================================================
+// Poll Mode Tests
+//
+// When Mode is WatcherModePoll, the watcher periodically calls PollFunc
+// instead of using fsnotify. This is used for Dolt SQL server backends
+// where filesystem events are unreliable.
+// =============================================================================
+
+func TestPoll_DetectsHashChange(t *testing.T) {
+	callCount := 0
+	pollFunc := func() (string, error) {
+		callCount++
+		if callCount <= 1 {
+			return "hash-v1", nil // Baseline
+		}
+		return "hash-v2", nil // Changed
+	}
+
+	w, err := watcher.New(watcher.Config{
+		Mode:         task.WatcherModePoll,
+		PollInterval: 20 * time.Millisecond,
+		PollFunc:     pollFunc,
+	})
+	require.NoError(t, err)
+	defer func() { _ = w.Stop() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := w.Broker().Subscribe(ctx)
+
+	err = w.Start()
+	require.NoError(t, err)
+
+	select {
+	case evt := <-sub:
+		require.Equal(t, watcher.DBChanged, evt.Payload.Type)
+	case <-time.After(500 * time.Millisecond):
+		require.Fail(t, "expected DBChanged event from poll")
+	}
+}
+
+func TestPoll_NoChangeNoEvent(t *testing.T) {
+	pollFunc := func() (string, error) {
+		return "stable-hash", nil
+	}
+
+	w, err := watcher.New(watcher.Config{
+		Mode:         task.WatcherModePoll,
+		PollInterval: 20 * time.Millisecond,
+		PollFunc:     pollFunc,
+	})
+	require.NoError(t, err)
+	defer func() { _ = w.Stop() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := w.Broker().Subscribe(ctx)
+
+	err = w.Start()
+	require.NoError(t, err)
+
+	select {
+	case <-sub:
+		require.Fail(t, "should not publish event when hash is unchanged")
+	case <-time.After(100 * time.Millisecond):
+		// Expected — no event
+	}
+}
+
+func TestPoll_HandlesErrors(t *testing.T) {
+	callCount := 0
+	pollFunc := func() (string, error) {
+		callCount++
+		if callCount <= 2 {
+			return "", fmt.Errorf("connection refused")
+		}
+		if callCount == 3 {
+			return "hash-v1", nil // Baseline after recovery
+		}
+		return "hash-v2", nil // Change after recovery
+	}
+
+	w, err := watcher.New(watcher.Config{
+		Mode:         task.WatcherModePoll,
+		PollInterval: 20 * time.Millisecond,
+		PollFunc:     pollFunc,
+	})
+	require.NoError(t, err)
+	defer func() { _ = w.Stop() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := w.Broker().Subscribe(ctx)
+
+	err = w.Start()
+	require.NoError(t, err)
+
+	// Should eventually detect the change after errors are resolved
+	select {
+	case evt := <-sub:
+		require.Equal(t, watcher.DBChanged, evt.Payload.Type)
+	case <-time.After(500 * time.Millisecond):
+		require.Fail(t, "expected DBChanged after error recovery")
+	}
+}
+
+func TestPoll_StopCleanShutdown(t *testing.T) {
+	pollFunc := func() (string, error) {
+		return "hash", nil
+	}
+
+	w, err := watcher.New(watcher.Config{
+		Mode:         task.WatcherModePoll,
+		PollInterval: 20 * time.Millisecond,
+		PollFunc:     pollFunc,
+	})
+	require.NoError(t, err)
+
+	err = w.Start()
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	go func() {
+		err := w.Stop()
+		require.NoError(t, err)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Clean shutdown
+	case <-time.After(1 * time.Second):
+		require.Fail(t, "Stop() timed out in poll mode")
+	}
+}
+
+func TestPoll_NilPollFuncReturnsError(t *testing.T) {
+	_, err := watcher.New(watcher.Config{
+		Mode:     task.WatcherModePoll,
+		PollFunc: nil,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PollFunc is required")
 }

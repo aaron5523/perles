@@ -57,6 +57,16 @@ type BackendCapabilities struct {
 	SupportsNotesField   bool
 }
 
+// WatcherMode selects the change detection strategy.
+type WatcherMode string
+
+const (
+	// WatcherModeFS uses fsnotify to watch filesystem events (default, used by SQLite).
+	WatcherModeFS WatcherMode = "fs"
+	// WatcherModePoll periodically calls PollFunc to detect changes (used by Dolt).
+	WatcherModePoll WatcherMode = "poll"
+)
+
 // WatcherConfig holds backend-specific file watcher configuration.
 type WatcherConfig struct {
 	// RelevantFiles lists the base filenames that should trigger a refresh.
@@ -66,6 +76,19 @@ type WatcherConfig struct {
 	// DebounceDuration is how long to wait after the last filesystem event
 	// before publishing a change notification. Zero means use default (100ms).
 	DebounceDuration time.Duration
+
+	// Mode selects the change detection strategy. Empty defaults to WatcherModeFS.
+	Mode WatcherMode
+
+	// PollInterval is how often to call PollFunc when Mode is WatcherModePoll.
+	// Zero defaults to 2 seconds.
+	PollInterval time.Duration
+
+	// PollFunc returns a state hash for the data store. The watcher calls this
+	// periodically and publishes DBChanged when the hash changes. Only used
+	// when Mode is WatcherModePoll. The watcher package stays database-agnostic;
+	// the backend adapter provides this as a closure.
+	PollFunc func() (string, error)
 }
 
 // Backend is the top-level interface for a task-tracking backend.

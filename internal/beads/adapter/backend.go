@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -66,7 +67,7 @@ func NewBeadsBackend(dataDir, workDir string) (*BeadsBackend, error) {
 	queryExec := NewBeadsQueryExecutor(bqlExec)
 
 	// Detect watcher config based on backend type (SQLite vs Dolt)
-	watcherCfg := detectWatcherConfig(dataDir)
+	watcherCfg := detectWatcherConfig(dataDir, client.DB())
 
 	return &BeadsBackend{
 		client:        client,
@@ -141,14 +142,20 @@ func beadsCapabilities() task.BackendCapabilities {
 }
 
 // detectWatcherConfig returns file watcher config based on the backend type.
-func detectWatcherConfig(dataDir string) task.WatcherConfig {
+// For Dolt backends, it configures poll-based change detection using
+// DOLT_HASHOF_DB() to detect working set changes from external processes.
+func detectWatcherConfig(dataDir string, db *sql.DB) task.WatcherConfig {
 	meta, err := infrabeads.LoadMetadata(dataDir)
 	if err == nil && meta.Backend == "dolt" {
-		// Dolt server mode: watch last-touched sentinel file with longer debounce
-		// to coalesce rapid bd commands (e.g., bulk creates/deletes in a loop).
+		// Dolt server mode: poll DOLT_HASHOF_DB() for change detection.
+		// The sentinel file approach (last-touched) is unreliable because
+		// bd does not consistently update it on write operations.
 		return task.WatcherConfig{
-			RelevantFiles:    []string{"last-touched"},
+			RelevantFiles:    []string{"last-touched"}, // Kept as fallback
 			DebounceDuration: 500 * time.Millisecond,
+			Mode:             task.WatcherModePoll,
+			PollInterval:     2 * time.Second,
+			PollFunc:         buildDoltHashPoller(db),
 		}
 	}
 
@@ -156,5 +163,21 @@ func detectWatcherConfig(dataDir string) task.WatcherConfig {
 	return task.WatcherConfig{
 		RelevantFiles:    []string{"beads.db", "beads.db-wal"},
 		DebounceDuration: 100 * time.Millisecond,
+	}
+}
+
+// buildDoltHashPoller returns a PollFunc that queries DOLT_HASHOF_DB()
+// to detect working set changes. Uses the working set hash (no args)
+// because bd uses SQL autocommit without explicit Dolt commits.
+func buildDoltHashPoller(db *sql.DB) func() (string, error) {
+	return func() (string, error) {
+		var hash string
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		err := db.QueryRowContext(ctx, "SELECT DOLT_HASHOF_DB()").Scan(&hash)
+		if err != nil {
+			return "", err
+		}
+		return hash, nil
 	}
 }
