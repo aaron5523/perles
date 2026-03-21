@@ -16,6 +16,7 @@ import (
 	"github.com/zjrosen/perles/internal/mode/shared"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/tree"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
 	"github.com/zjrosen/perles/internal/ui/shared/editor"
@@ -1893,6 +1894,86 @@ func TestSearch_MouseScrollAtBoundary_DoesNotGoNegative(t *testing.T) {
 
 	// Offset should never go negative
 	require.GreaterOrEqual(t, m.details.YOffset(), 0, "offset should never be negative")
+}
+
+// =============================================================================
+// Mouse Scroll in Tree Sub-Mode Tests
+// =============================================================================
+
+func TestSearch_MouseScrollWheelDown_TreeSubMode_ScrollsTree(t *testing.T) {
+	m := createTestModel(t)
+	m.subMode = mode.SubModeTree
+	m.focus = FocusResults
+
+	// Build a tree with multiple nodes (Children slice drives down-traversal)
+	issueMap := map[string]*task.Issue{
+		"root":    {ID: "root", TitleText: "Root Issue", Children: []string{"child-1", "child-2"}},
+		"child-1": {ID: "child-1", TitleText: "Child 1", ParentID: "root"},
+		"child-2": {ID: "child-2", TitleText: "Child 2", ParentID: "root"},
+	}
+	m.tree = tree.New("root", issueMap, tree.DirectionDown, tree.ModeChildren, mocks.NewMockClock(t))
+	m.tree.SetSize(80, 20)
+
+	// Cursor should start at root
+	require.Equal(t, "root", m.tree.SelectedNode().Issue.ID)
+
+	// Mouse wheel down should move cursor down
+	m, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	require.Equal(t, "child-1", m.tree.SelectedNode().Issue.ID, "wheel down should select child-1")
+
+	// Mouse wheel down again
+	m, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	require.Equal(t, "child-2", m.tree.SelectedNode().Issue.ID, "wheel down should select child-2")
+}
+
+func TestSearch_MouseScrollWheelUp_TreeSubMode_ScrollsTree(t *testing.T) {
+	m := createTestModel(t)
+	m.subMode = mode.SubModeTree
+	m.focus = FocusResults
+
+	// Build a tree with multiple nodes
+	issueMap := map[string]*task.Issue{
+		"root":    {ID: "root", TitleText: "Root Issue", Children: []string{"child-1", "child-2"}},
+		"child-1": {ID: "child-1", TitleText: "Child 1", ParentID: "root"},
+		"child-2": {ID: "child-2", TitleText: "Child 2", ParentID: "root"},
+	}
+	m.tree = tree.New("root", issueMap, tree.DirectionDown, tree.ModeChildren, mocks.NewMockClock(t))
+	m.tree.SetSize(80, 20)
+
+	// Move cursor to last node
+	m.tree.MoveCursor(2)
+	require.Equal(t, "child-2", m.tree.SelectedNode().Issue.ID)
+
+	// Mouse wheel up should move cursor up
+	m, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
+	require.Equal(t, "child-1", m.tree.SelectedNode().Issue.ID, "wheel up should select child-1")
+}
+
+func TestSearch_MouseScroll_TreeSubMode_FocusDetails_ScrollsDetails(t *testing.T) {
+	m := createTestModel(t)
+	m.subMode = mode.SubModeTree
+	m.focus = FocusDetails // Focus on details, not tree
+
+	// Build a tree
+	issueMap := map[string]*task.Issue{
+		"root":    {ID: "root", TitleText: "Root Issue", Children: []string{"child-1"}},
+		"child-1": {ID: "child-1", TitleText: "Child 1", ParentID: "root"},
+	}
+	m.tree = tree.New("root", issueMap, tree.DirectionDown, tree.ModeChildren, mocks.NewMockClock(t))
+	m.tree.SetSize(80, 20)
+
+	// Set up details with scrollable content
+	issue := task.Issue{
+		ID:              "root",
+		TitleText:       "Root Issue",
+		DescriptionText: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10",
+	}
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 5)
+	m.hasDetail = true
+
+	// Tree cursor should stay at root — wheel should go to details, not tree
+	m, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	require.Equal(t, "root", m.tree.SelectedNode().Issue.ID, "tree cursor should not move when details is focused")
 }
 
 // =============================================================================

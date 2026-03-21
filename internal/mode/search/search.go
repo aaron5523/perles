@@ -610,8 +610,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return result, nil
 		}
 
-		// Forward wheel events to details regardless of focus
+		// Forward wheel events to the appropriate pane
 		if mouseMsg.Button == tea.MouseButtonWheelUp || mouseMsg.Button == tea.MouseButtonWheelDown {
+			// In tree sub-mode with focus on tree panel, scroll the tree
+			if m.subMode == mode.SubModeTree && m.focus == FocusResults && m.tree != nil {
+				if mouseMsg.Button == tea.MouseButtonWheelUp {
+					m.tree.MoveCursor(-1)
+				} else {
+					m.tree.MoveCursor(1)
+				}
+				m.updateDetailFromTree()
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.details, cmd = m.details.Update(mouseMsg)
 			return m, cmd
