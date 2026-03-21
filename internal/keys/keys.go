@@ -514,7 +514,7 @@ func ShortHelp() []key.Binding {
 func FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{Common.Up, Common.Down, Common.Left, Common.Right},
-		{Common.Enter, Kanban.Refresh, Kanban.Yank, Kanban.Status, Kanban.Priority, Kanban.Sort, Kanban.AddColumn, Kanban.EditColumn, Kanban.MoveColumnLeft, Kanban.MoveColumnRight},
+		{Common.Enter, Kanban.Refresh, Kanban.Yank, Kanban.Priority, Kanban.Sort, Kanban.AddColumn, Kanban.EditColumn, Kanban.MoveColumnLeft, Kanban.MoveColumnRight},
 		{Kanban.NextView, Kanban.PrevView, Kanban.ViewMenu, Kanban.DeleteColumn},
 		{Common.Help, Kanban.ToggleStatus, Common.Escape, Kanban.QuitConfirm},
 	}

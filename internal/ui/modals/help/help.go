@@ -250,6 +250,7 @@ func (m Model) renderKanbanContent() string {
 	actionsCol.WriteString(renderBinding(keys.Kanban.DeleteColumn))
 	actionsCol.WriteString(renderBinding(keys.Kanban.MoveColumnLeft))
 	actionsCol.WriteString(renderBinding(keys.Kanban.MoveColumnRight))
+	actionsCol.WriteString(renderBinding(keys.Kanban.Sort))
 	actionsCol.WriteString(renderBinding(keys.Component.EditAction))
 	actionsCol.WriteString(renderBinding(keys.Component.DelAction))
 
