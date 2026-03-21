@@ -1976,6 +1976,18 @@ func TestSearch_MouseScroll_TreeSubMode_FocusDetails_ScrollsDetails(t *testing.T
 	require.Equal(t, "root", m.tree.SelectedNode().Issue.ID, "tree cursor should not move when details is focused")
 }
 
+func TestSearch_MouseScroll_TreeSubMode_NilTree_FallsThrough(t *testing.T) {
+	m := createTestModel(t)
+	m.subMode = mode.SubModeTree
+	m.focus = FocusResults
+	m.tree = nil // Tree not yet loaded
+
+	// Should not panic — falls through to details pane
+	m, cmd := m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	_ = cmd
+	require.Nil(t, m.tree, "tree should remain nil")
+}
+
 // =============================================================================
 // Diff Viewer Tests (Ctrl+G)
 // =============================================================================
