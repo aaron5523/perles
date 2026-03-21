@@ -3,9 +3,13 @@ package board
 import (
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 
 	zone "github.com/lrstanley/bubblezone"
 
+	"github.com/zjrosen/perles/internal/beads/bql"
+	"github.com/zjrosen/perles/internal/issuesort"
 	"github.com/zjrosen/perles/internal/mode/shared"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/issuebadge"
@@ -153,6 +157,10 @@ type Column struct {
 	executor  task.QueryExecutor // BQL executor for loading issues
 	query     string             // BQL query for this column
 	loadError error              // error from last load attempt
+
+	// Sort override fields (ephemeral, not persisted)
+	sortField string // BQL field name for sort override ("" = no override)
+	sortDesc  bool   // true for DESC, false for ASC
 }
 
 // NewColumn creates a new column.
@@ -187,6 +195,32 @@ func NewColumnWithExecutor(title string, query string, executor task.QueryExecut
 	return col
 }
 
+// SortFieldDef defines a sortable field with its BQL name, display label, and abbreviation.
+type SortFieldDef struct {
+	Field  string // BQL field name (e.g., "priority")
+	Label  string // Display label for picker (e.g., "Priority")
+	Abbrev string // 3-char abbreviation for header indicator (e.g., "Pri")
+}
+
+// SortFields is the canonical list of fields available for column sorting.
+// Used by the sort picker, compareByField, and sortIndicator.
+var SortFields = []SortFieldDef{
+	{Field: "priority", Label: "Priority", Abbrev: "Pri"},
+	{Field: "created", Label: "Created", Abbrev: "Cre"},
+	{Field: "updated", Label: "Updated", Abbrev: "Upd"},
+	{Field: "title", Label: "Title", Abbrev: "Ttl"},
+}
+
+// isValidSortField returns true if field is in SortFields.
+func isValidSortField(field string) bool {
+	for _, sf := range SortFields {
+		if sf.Field == field {
+			return true
+		}
+	}
+	return false
+}
+
 // ColumnLoadedMsg is sent when a column finishes loading its issues.
 type ColumnLoadedMsg struct {
 	ViewIndex   int          // which view this column belongs to
@@ -196,6 +230,91 @@ type ColumnLoadedMsg struct {
 	Err         error        // error if load failed
 }
 
+// effectiveQuery returns the BQL query with sort override or column-level default applied.
+// If the user has set a sort override, it takes precedence.
+// If the query has no explicit ORDER BY and no user override, priority ASC is applied as default.
+// If the query has an explicit ORDER BY and no user override, the query is left unchanged.
+//
+// Note: This provides SQL-level ordering. sortIssues() applies a second in-memory stable sort
+// with the same field to add a natural-ID tiebreaker (e.g., bd-5.1 < bd-5.2 < bd-5.10) that
+// SQL cannot express. Both layers are intentional — see sortIssues() for details.
+func (c Column) effectiveQuery() string {
+	query := c.query
+
+	if c.sortField != "" {
+		// User override: strip any existing ORDER BY and append the override.
+		// StripOrderBy returns the input unchanged when no ORDER BY exists.
+		dir := " asc"
+		if c.sortDesc {
+			dir = " desc"
+		}
+		base := bql.StripOrderBy(query)
+		if base == "" {
+			return "order by " + c.sortField + dir
+		}
+		return base + " order by " + c.sortField + dir
+	}
+
+	// No user override: apply column-level default only if query lacks ORDER BY.
+	// If StripOrderBy returns the same string, there is no ORDER BY to preserve.
+	if bql.StripOrderBy(query) == query {
+		return query + " order by priority"
+	}
+
+	return query
+}
+
+// sortIssues applies an in-memory stable sort using the column's sort field
+// with natural ID as tiebreaker. This ensures deterministic ordering when
+// multiple issues share the same sort-field value.
+//
+// This is intentionally a second sort after SQL ORDER BY (see effectiveQuery).
+// SQL provides primary ordering; this adds the natural-ID tiebreaker that SQL
+// cannot express (e.g., "bd-5.2" before "bd-5.10" instead of lexicographic order).
+func (c Column) sortIssues(issues []task.Issue) {
+	if len(issues) <= 1 {
+		return
+	}
+
+	field := c.sortField
+	desc := c.sortDesc
+	// When no user override, default to priority ASC (matches effectiveQuery default).
+	if field == "" {
+		field = "priority"
+		desc = false
+	}
+
+	sort.SliceStable(issues, func(i, j int) bool {
+		cmp := compareByField(issues[i], issues[j], field, desc)
+		if cmp != 0 {
+			return cmp < 0
+		}
+		return issuesort.NaturalLess(issues[i].ID, issues[j].ID)
+	})
+}
+
+// compareByField returns -1, 0, or 1 comparing two issues by the given field.
+// When desc is true the comparison is inverted.
+func compareByField(a, b task.Issue, field string, desc bool) int {
+	var cmp int
+	switch field {
+	case "priority":
+		cmp = int(a.Priority) - int(b.Priority)
+	case "created":
+		cmp = a.CreatedAt.Compare(b.CreatedAt)
+	case "updated":
+		cmp = a.UpdatedAt.Compare(b.UpdatedAt)
+	case "title":
+		cmp = strings.Compare(a.TitleText, b.TitleText)
+	default:
+		cmp = int(a.Priority) - int(b.Priority)
+	}
+	if desc {
+		cmp = -cmp
+	}
+	return cmp
+}
+
 // LoadIssues executes the BQL query and returns the column with loaded issues.
 // This is a synchronous operation - for async loading, use LoadIssuesCmd().
 func (c Column) LoadIssues() Column {
@@ -203,13 +322,14 @@ func (c Column) LoadIssues() Column {
 		return c
 	}
 
-	issues, err := c.executor.Execute(c.query)
+	issues, err := c.executor.Execute(c.effectiveQuery())
 	if err != nil {
 		c.loadError = err
 		return c
 	}
 
 	c.loadError = nil
+	c.sortIssues(issues)
 	return c.SetItems(issues)
 }
 
@@ -227,9 +347,9 @@ func (c Column) LoadCmd(viewIndex, columnIndex int) tea.Cmd {
 		return nil
 	}
 
-	// Capture values for closure
+	// Capture values for closure (use effectiveQuery for sort override support)
 	executor := c.executor
-	query := c.query
+	query := c.effectiveQuery()
 	title := c.title
 
 	return func() tea.Msg {
@@ -263,6 +383,7 @@ func (c Column) HandleLoaded(msg tea.Msg) BoardColumn {
 	}
 
 	c.loadError = nil
+	c.sortIssues(loadedMsg.Issues)
 	return c.SetItems(loadedMsg.Issues)
 }
 
@@ -384,6 +505,33 @@ func (c Column) SetShowCounts(show bool) BoardColumn {
 	return c
 }
 
+// SetSortOverride sets the sort override for this column.
+// Only accepts fields defined in SortFields; unknown fields are ignored.
+// Returns a new Column with the override applied.
+func (c Column) SetSortOverride(field string, desc bool) Column {
+	if !isValidSortField(field) {
+		return c
+	}
+	c.sortField = field
+	c.sortDesc = desc
+	return c
+}
+
+// HasSortOverride returns true if the column has a user-initiated sort override.
+func (c Column) HasSortOverride() bool {
+	return c.sortField != ""
+}
+
+// SortField returns the current sort override field ("" if none).
+func (c Column) SortField() string {
+	return c.sortField
+}
+
+// SortDesc returns whether the sort override is descending.
+func (c Column) SortDesc() bool {
+	return c.sortDesc
+}
+
 // SelectedItem returns the currently selected issue.
 func (c Column) SelectedItem() *task.Issue {
 	if item := c.list.SelectedItem(); item != nil {
@@ -430,14 +578,39 @@ func (c Column) Update(msg tea.Msg) (BoardColumn, tea.Cmd) {
 	return c, cmd
 }
 
-// Title returns the formatted title with optional count for border rendering.
+// Title returns the formatted title with optional count and sort indicator for border rendering.
 // If showCounts is false, returns just the title without count.
+// If a sort override is active, includes an indicator like "↑Pri".
 func (c Column) Title() string {
+	title := c.title
+	if c.sortField != "" {
+		title += " " + c.sortIndicator()
+	}
 	// Default to showing counts if not explicitly set
 	if c.showCounts != nil && !*c.showCounts {
-		return c.title
+		return title
 	}
-	return fmt.Sprintf("%s (%d)", c.title, len(c.items))
+	return fmt.Sprintf("%s (%d)", title, len(c.items))
+}
+
+// sortIndicator returns a compact sort indicator like "↑Pri" or "↓Upd".
+func (c Column) sortIndicator() string {
+	arrow := "↑"
+	if c.sortDesc {
+		arrow = "↓"
+	}
+	return arrow + sortFieldAbbrev(c.sortField)
+}
+
+// sortFieldAbbrev returns a 3-character abbreviation for a BQL sort field.
+// Uses the canonical SortFields definitions.
+func sortFieldAbbrev(field string) string {
+	for _, sf := range SortFields {
+		if sf.Field == field {
+			return sf.Abbrev
+		}
+	}
+	return "???"
 }
 
 // RightTitle returns an optional right-aligned title.

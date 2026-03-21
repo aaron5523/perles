@@ -2,7 +2,9 @@ package board
 
 import (
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -332,4 +334,289 @@ func TestColumnLoadedMsg_WithError(t *testing.T) {
 	require.Equal(t, "Ready", msg.ColumnTitle)
 	require.Nil(t, msg.Issues)
 	require.Error(t, msg.Err)
+}
+
+// --- Sort override tests ---
+
+func TestColumn_SortOverride_SetAndClear(t *testing.T) {
+	c := NewColumn("Test")
+	require.False(t, c.HasSortOverride())
+	require.Equal(t, "", c.SortField())
+	require.False(t, c.SortDesc())
+
+	c = c.SetSortOverride("priority", false)
+	require.True(t, c.HasSortOverride())
+	require.Equal(t, "priority", c.SortField())
+	require.False(t, c.SortDesc())
+
+	c = c.SetSortOverride("updated", true)
+	require.True(t, c.HasSortOverride())
+	require.Equal(t, "updated", c.SortField())
+	require.True(t, c.SortDesc())
+}
+
+func TestColumn_SetSortOverride_RejectsInvalidField(t *testing.T) {
+	c := NewColumn("Test")
+	c = c.SetSortOverride("priority", false)
+	require.True(t, c.HasSortOverride())
+
+	// Invalid field is ignored — sort override unchanged
+	c = c.SetSortOverride("nonexistent", true)
+	require.Equal(t, "priority", c.SortField())
+	require.False(t, c.SortDesc())
+
+	// Empty string is also rejected
+	c = c.SetSortOverride("", false)
+	require.Equal(t, "priority", c.SortField())
+}
+
+func TestColumn_Title_WithSortIndicator(t *testing.T) {
+	tests := []struct {
+		name      string
+		title     string
+		sortField string
+		sortDesc  bool
+		items     int
+		want      string
+	}{
+		{
+			name:  "no sort override",
+			title: "Bugs",
+			items: 3,
+			want:  "Bugs (3)",
+		},
+		{
+			name:      "priority ASC",
+			title:     "Bugs",
+			sortField: "priority",
+			items:     3,
+			want:      "Bugs ↑Pri (3)",
+		},
+		{
+			name:      "updated DESC",
+			title:     "Ready",
+			sortField: "updated",
+			sortDesc:  true,
+			items:     5,
+			want:      "Ready ↓Upd (5)",
+		},
+		{
+			name:      "created ASC",
+			title:     "Done",
+			sortField: "created",
+			items:     0,
+			want:      "Done ↑Cre (0)",
+		},
+		{
+			name:      "title ASC",
+			title:     "Backlog",
+			sortField: "title",
+			items:     1,
+			want:      "Backlog ↑Ttl (1)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewColumn(tt.title)
+			issues := make([]task.Issue, tt.items)
+			for i := range issues {
+				issues[i] = task.Issue{ID: fmt.Sprintf("bd-%d", i)}
+			}
+			c = c.SetItems(issues)
+			if tt.sortField != "" {
+				c = c.SetSortOverride(tt.sortField, tt.sortDesc)
+			}
+			got := c.Title()
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSortFieldAbbrev(t *testing.T) {
+	tests := []struct {
+		field string
+		want  string
+	}{
+		{"priority", "Pri"},
+		{"updated", "Upd"},
+		{"created", "Cre"},
+		{"title", "Ttl"},
+		{"status", "???"},
+		{"ab", "???"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.field, func(t *testing.T) {
+			require.Equal(t, tt.want, sortFieldAbbrev(tt.field))
+		})
+	}
+}
+
+func TestColumn_effectiveQuery(t *testing.T) {
+	tests := []struct {
+		name      string
+		query     string
+		sortField string
+		sortDesc  bool
+		want      string
+	}{
+		{
+			name:  "no ORDER BY, no override: appends default priority",
+			query: "type = bug",
+			want:  "type = bug order by priority",
+		},
+		{
+			name:      "no ORDER BY, with override ASC: appends override",
+			query:     "type = bug",
+			sortField: "created",
+			want:      "type = bug order by created asc",
+		},
+		{
+			name:      "no ORDER BY, with override DESC: appends override",
+			query:     "status = open",
+			sortField: "updated",
+			sortDesc:  true,
+			want:      "status = open order by updated desc",
+		},
+		{
+			name:  "explicit ORDER BY, no override: returns unchanged",
+			query: "type = bug order by created desc",
+			want:  "type = bug order by created desc",
+		},
+		{
+			name:      "explicit ORDER BY, with override: strips and appends",
+			query:     "type = bug order by created desc",
+			sortField: "priority",
+			want:      "type = bug order by priority asc",
+		},
+		{
+			name:      "EXPAND + ORDER BY, with override: strips ORDER BY, preserves EXPAND",
+			query:     "type = epic expand down depth 2 order by updated desc",
+			sortField: "priority",
+			want:      "type = epic expand down depth 2 order by priority asc",
+		},
+		{
+			name:  "EXPAND, no ORDER BY, no override: appends default",
+			query: "type = bug expand down",
+			want:  "type = bug expand down order by priority",
+		},
+		{
+			name:      "ORDER BY only, with override: replaces",
+			query:     "order by updated desc",
+			sortField: "title",
+			want:      "order by title asc",
+		},
+		{
+			name:      "case insensitive ORDER BY, with override: strips correctly",
+			query:     "type = bug ORDER BY created DESC",
+			sortField: "priority",
+			want:      "type = bug order by priority asc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewColumn("Test")
+			c.query = tt.query
+			if tt.sortField != "" {
+				c = c.SetSortOverride(tt.sortField, tt.sortDesc)
+			}
+			got := c.effectiveQuery()
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// --- sortIssues tests ---
+
+func TestColumn_sortIssues_PriorityWithNaturalIDTiebreaker(t *testing.T) {
+	issues := []task.Issue{
+		{ID: "bd-5", TitleText: "A", Priority: task.PriorityHigh},
+		{ID: "bd-5.10", TitleText: "B", Priority: task.PriorityHigh},
+		{ID: "bd-5.2", TitleText: "C", Priority: task.PriorityHigh},
+		{ID: "bd-5.1", TitleText: "D", Priority: task.PriorityHigh},
+		{ID: "bd-3", TitleText: "E", Priority: task.PriorityCritical},
+	}
+
+	c := NewColumn("Test") // no sort override → default priority ASC
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{
+		"bd-3",    // P0 first
+		"bd-5",    // P1 — base ID before sub-IDs (fewer segments)
+		"bd-5.1",  // P1 — sub-ID .1 < .2
+		"bd-5.2",  // P1 — sub-ID .2 < .10
+		"bd-5.10", // P1 — sub-ID .10 (natural: 10 > 2)
+	}, ids)
+}
+
+func TestColumn_sortIssues_WithSortOverrideDesc(t *testing.T) {
+	now := time.Now()
+	issues := []task.Issue{
+		{ID: "bd-1", TitleText: "Old", CreatedAt: now.Add(-2 * time.Hour)},
+		{ID: "bd-3", TitleText: "New", CreatedAt: now},
+		{ID: "bd-2", TitleText: "Mid", CreatedAt: now.Add(-1 * time.Hour)},
+	}
+
+	c := NewColumn("Test")
+	c = c.SetSortOverride("created", true) // DESC
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{"bd-3", "bd-2", "bd-1"}, ids)
+}
+
+func TestColumn_sortIssues_AlreadySorted(t *testing.T) {
+	issues := []task.Issue{
+		{ID: "bd-1", Priority: task.PriorityCritical},
+		{ID: "bd-2", Priority: task.PriorityHigh},
+		{ID: "bd-3", Priority: task.PriorityMedium},
+	}
+
+	c := NewColumn("Test")
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{"bd-1", "bd-2", "bd-3"}, ids)
+}
+
+func TestColumn_sortIssues_SingleAndEmpty(t *testing.T) {
+	c := NewColumn("Test")
+
+	// Empty — should not panic
+	c.sortIssues(nil)
+	c.sortIssues([]task.Issue{})
+
+	// Single — should not panic
+	single := []task.Issue{{ID: "bd-1"}}
+	c.sortIssues(single)
+	require.Equal(t, "bd-1", single[0].ID)
+}
+
+func TestColumn_sortIssues_TitleAsc(t *testing.T) {
+	issues := []task.Issue{
+		{ID: "bd-3", TitleText: "Charlie"},
+		{ID: "bd-1", TitleText: "Alpha"},
+		{ID: "bd-2", TitleText: "Bravo"},
+	}
+
+	c := NewColumn("Test")
+	c = c.SetSortOverride("title", false) // ASC
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{"bd-1", "bd-2", "bd-3"}, ids)
 }
