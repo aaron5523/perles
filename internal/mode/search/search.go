@@ -606,8 +606,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		// Handle separator drag (takes priority over other mouse handlers)
-		if result, cmd, handled := m.handleSeparatorDrag(mouseMsg); handled {
-			return result, cmd
+		if result, handled := m.handleSeparatorDrag(mouseMsg); handled {
+			return result, nil
 		}
 
 		// Forward wheel events to details regardless of focus
@@ -1361,34 +1361,30 @@ func (m Model) handleNavUp() (Model, tea.Cmd) {
 }
 
 // handleSeparatorDrag handles mouse drag on the separator between left and right panes.
-// Returns (model, cmd, handled). If handled is true, the caller should return early.
-func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
+// Returns (model, handled). If handled is true, the caller should return early.
+func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, bool) {
 	// Mouse release: stop dragging
 	if m.separatorDragging && msg.Action == tea.MouseActionRelease {
 		m.separatorDragging = false
-		return m, nil, true
+		return m, true
 	}
 
 	// Mouse motion while dragging: update width percentage
 	if m.separatorDragging && msg.Action == tea.MouseActionMotion {
 		if m.width <= 0 {
-			return m, nil, true
+			return m, true
 		}
 
 		newPct := msg.X * 100 / m.width
 
 		// Clamp
-		if newPct < searchMinLeftPct {
-			newPct = searchMinLeftPct
-		}
-		if newPct > searchMaxLeftPct {
-			newPct = searchMaxLeftPct
-		}
+		newPct = max(newPct, searchMinLeftPct)
+		newPct = min(newPct, searchMaxLeftPct)
 
 		m.leftWidthPct = newPct
 		// Recalculate component sizes for the new split
 		m = m.SetSize(m.width, m.height)
-		return m, nil, true
+		return m, true
 	}
 
 	// Mouse press: detect if near the separator to start dragging
@@ -1404,12 +1400,12 @@ func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 			if msg.X >= hitLeft && msg.X <= hitRight &&
 				msg.Y >= leftZone.StartY && msg.Y <= leftZone.EndY {
 				m.separatorDragging = true
-				return m, nil, true
+				return m, true
 			}
 		}
 	}
 
-	return m, nil, false
+	return m, false
 }
 
 // handleMouseClick handles left-click release events on issues and the search input.
@@ -2337,10 +2333,7 @@ func (m Model) splitWidths() (leftWidth, rightWidth int) {
 	if m.width <= 0 {
 		return 0, 0
 	}
-	leftWidth = m.width * m.leftWidthPct / 100
-	if leftWidth < searchMinPaneChar {
-		leftWidth = searchMinPaneChar
-	}
+	leftWidth = max(m.width*m.leftWidthPct/100, searchMinPaneChar)
 	rightWidth = m.width - leftWidth - 1 // -1 for gap
 	if rightWidth < searchMinPaneChar {
 		rightWidth = searchMinPaneChar

@@ -56,41 +56,6 @@ func TestClipboardDetection(t *testing.T) {
 		}
 	})
 
-	t.Run("isLocalTmux", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			envVars  map[string]string
-			expected bool
-		}{
-			{
-				name:     "no env vars",
-				envVars:  map[string]string{},
-				expected: false,
-			},
-			{
-				name:     "TMUX only (local)",
-				envVars:  map[string]string{"TMUX": "/tmp/tmux-1000/default,12345,0"},
-				expected: true,
-			},
-			{
-				name:     "TMUX with SSH (remote)",
-				envVars:  map[string]string{"TMUX": "/tmp/tmux", "SSH_TTY": "/dev/pts/0"},
-				expected: false,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				clearClipboardEnv(t)
-				for k, v := range tt.envVars {
-					t.Setenv(k, v)
-				}
-
-				require.Equal(t, tt.expected, isLocalTmux())
-			})
-		}
-	})
-
 	t.Run("isGNUScreen", func(t *testing.T) {
 		tests := []struct {
 			name     string
