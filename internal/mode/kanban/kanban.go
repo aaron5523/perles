@@ -162,7 +162,7 @@ func (m Model) SetSize(width, height int) Model {
 		m.modal.SetSize(width, height)
 	}
 	// Update picker if we're viewing a menu
-	if m.view == ViewViewMenu {
+	if m.view == ViewViewMenu || m.view == ViewSortMenu {
 		m.picker = m.picker.SetSize(width, height)
 	}
 	return m
@@ -411,8 +411,8 @@ func (m Model) View() string {
 		// Render issue editor overlay on top of board
 		bg := m.renderBoardWithStatusBar()
 		return m.issueEditor.Overlay(bg)
-	case ViewViewMenu:
-		// Render view menu overlay on top of board
+	case ViewViewMenu, ViewSortMenu:
+		// Render picker overlay on top of board (view menu or sort menu)
 		bg := m.renderBoardWithStatusBar()
 		return m.picker.Overlay(bg)
 	case ViewDeleteColumnModal, ViewDeleteIssue:
