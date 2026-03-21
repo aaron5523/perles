@@ -1379,9 +1379,7 @@ func (m Model) handleSeparatorDrag(msg tea.MouseMsg) (Model, bool) {
 
 		// Clamp
 		newPct = max(newPct, searchMinLeftPct)
-		if newPct > searchMaxLeftPct {
-			newPct = searchMaxLeftPct
-		}
+		newPct = min(newPct, searchMaxLeftPct)
 
 		m.leftWidthPct = newPct
 		// Recalculate component sizes for the new split
@@ -2335,10 +2333,7 @@ func (m Model) splitWidths() (leftWidth, rightWidth int) {
 	if m.width <= 0 {
 		return 0, 0
 	}
-	leftWidth = m.width * m.leftWidthPct / 100
-	if leftWidth < searchMinPaneChar {
-		leftWidth = searchMinPaneChar
-	}
+	leftWidth = max(m.width*m.leftWidthPct/100, searchMinPaneChar)
 	rightWidth = m.width - leftWidth - 1 // -1 for gap
 	if rightWidth < searchMinPaneChar {
 		rightWidth = searchMinPaneChar

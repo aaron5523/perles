@@ -1272,9 +1272,7 @@ func (m Model) handleEpicSeparatorDrag(msg tea.MouseMsg) (mode.Controller, bool)
 		// Clamp to ensure minimum widths for both panes
 		// (absolute pixel minimums are enforced by calculateEpicTreeLayout)
 		newPct = max(newPct, 15)
-		if newPct > 85 {
-			newPct = 85
-		}
+		newPct = min(newPct, 85)
 
 		m.epicTreeWidthPct = newPct
 		return m, true
