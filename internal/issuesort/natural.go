@@ -15,13 +15,13 @@ func NaturalIDs(ids []string) {
 		return
 	}
 	sort.Slice(ids, func(i, j int) bool {
-		return naturalLess(ids[i], ids[j])
+		return NaturalLess(ids[i], ids[j])
 	})
 }
 
-// naturalLess compares two strings with natural ordering by splitting on "."
+// NaturalLess compares two strings with natural ordering by splitting on "."
 // and comparing numeric segments as integers.
-func naturalLess(a, b string) bool {
+func NaturalLess(a, b string) bool {
 	aParts := strings.Split(a, ".")
 	bParts := strings.Split(b, ".")
 

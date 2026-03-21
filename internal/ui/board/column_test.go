@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -514,4 +515,98 @@ func TestColumn_effectiveQuery(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// --- sortIssues tests ---
+
+func TestColumn_sortIssues_PriorityWithNaturalIDTiebreaker(t *testing.T) {
+	issues := []task.Issue{
+		{ID: "bd-5", TitleText: "A", Priority: task.PriorityHigh},
+		{ID: "bd-5.10", TitleText: "B", Priority: task.PriorityHigh},
+		{ID: "bd-5.2", TitleText: "C", Priority: task.PriorityHigh},
+		{ID: "bd-5.1", TitleText: "D", Priority: task.PriorityHigh},
+		{ID: "bd-3", TitleText: "E", Priority: task.PriorityCritical},
+	}
+
+	c := NewColumn("Test") // no sort override → default priority ASC
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{
+		"bd-3",    // P0 first
+		"bd-5",    // P1 — base ID before sub-IDs (fewer segments)
+		"bd-5.1",  // P1 — sub-ID .1 < .2
+		"bd-5.2",  // P1 — sub-ID .2 < .10
+		"bd-5.10", // P1 — sub-ID .10 (natural: 10 > 2)
+	}, ids)
+}
+
+func TestColumn_sortIssues_WithSortOverrideDesc(t *testing.T) {
+	now := time.Now()
+	issues := []task.Issue{
+		{ID: "bd-1", TitleText: "Old", CreatedAt: now.Add(-2 * time.Hour)},
+		{ID: "bd-3", TitleText: "New", CreatedAt: now},
+		{ID: "bd-2", TitleText: "Mid", CreatedAt: now.Add(-1 * time.Hour)},
+	}
+
+	c := NewColumn("Test")
+	c = c.SetSortOverride("created", true) // DESC
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{"bd-3", "bd-2", "bd-1"}, ids)
+}
+
+func TestColumn_sortIssues_AlreadySorted(t *testing.T) {
+	issues := []task.Issue{
+		{ID: "bd-1", Priority: task.PriorityCritical},
+		{ID: "bd-2", Priority: task.PriorityHigh},
+		{ID: "bd-3", Priority: task.PriorityMedium},
+	}
+
+	c := NewColumn("Test")
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{"bd-1", "bd-2", "bd-3"}, ids)
+}
+
+func TestColumn_sortIssues_SingleAndEmpty(t *testing.T) {
+	c := NewColumn("Test")
+
+	// Empty — should not panic
+	c.sortIssues(nil)
+	c.sortIssues([]task.Issue{})
+
+	// Single — should not panic
+	single := []task.Issue{{ID: "bd-1"}}
+	c.sortIssues(single)
+	require.Equal(t, "bd-1", single[0].ID)
+}
+
+func TestColumn_sortIssues_TitleAsc(t *testing.T) {
+	issues := []task.Issue{
+		{ID: "bd-3", TitleText: "Charlie"},
+		{ID: "bd-1", TitleText: "Alpha"},
+		{ID: "bd-2", TitleText: "Bravo"},
+	}
+
+	c := NewColumn("Test")
+	c = c.SetSortOverride("title", false) // ASC
+	c.sortIssues(issues)
+
+	ids := make([]string, len(issues))
+	for i, iss := range issues {
+		ids[i] = iss.ID
+	}
+	require.Equal(t, []string{"bd-1", "bd-2", "bd-3"}, ids)
 }

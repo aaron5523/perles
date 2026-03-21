@@ -3,10 +3,13 @@ package board
 import (
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 
 	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/zjrosen/perles/internal/beads/bql"
+	"github.com/zjrosen/perles/internal/issuesort"
 	"github.com/zjrosen/perles/internal/mode/shared"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/issuebadge"
@@ -231,6 +234,53 @@ func (c Column) effectiveQuery() string {
 	return query
 }
 
+// sortIssues applies an in-memory stable sort using the column's sort field
+// with natural ID as tiebreaker. This ensures deterministic ordering when
+// multiple issues share the same sort-field value.
+func (c Column) sortIssues(issues []task.Issue) {
+	if len(issues) <= 1 {
+		return
+	}
+
+	field := c.sortField
+	desc := c.sortDesc
+	// When no user override, default to priority ASC (matches effectiveQuery default).
+	if field == "" {
+		field = "priority"
+		desc = false
+	}
+
+	sort.SliceStable(issues, func(i, j int) bool {
+		cmp := compareByField(issues[i], issues[j], field, desc)
+		if cmp != 0 {
+			return cmp < 0
+		}
+		return issuesort.NaturalLess(issues[i].ID, issues[j].ID)
+	})
+}
+
+// compareByField returns -1, 0, or 1 comparing two issues by the given field.
+// When desc is true the comparison is inverted.
+func compareByField(a, b task.Issue, field string, desc bool) int {
+	var cmp int
+	switch field {
+	case "priority":
+		cmp = int(a.Priority) - int(b.Priority)
+	case "created":
+		cmp = a.CreatedAt.Compare(b.CreatedAt)
+	case "updated":
+		cmp = a.UpdatedAt.Compare(b.UpdatedAt)
+	case "title":
+		cmp = strings.Compare(a.TitleText, b.TitleText)
+	default:
+		cmp = int(a.Priority) - int(b.Priority)
+	}
+	if desc {
+		cmp = -cmp
+	}
+	return cmp
+}
+
 // LoadIssues executes the BQL query and returns the column with loaded issues.
 // This is a synchronous operation - for async loading, use LoadIssuesCmd().
 func (c Column) LoadIssues() Column {
@@ -245,6 +295,7 @@ func (c Column) LoadIssues() Column {
 	}
 
 	c.loadError = nil
+	c.sortIssues(issues)
 	return c.SetItems(issues)
 }
 
@@ -298,6 +349,7 @@ func (c Column) HandleLoaded(msg tea.Msg) BoardColumn {
 	}
 
 	c.loadError = nil
+	c.sortIssues(loadedMsg.Issues)
 	return c.SetItems(loadedMsg.Issues)
 }
 
