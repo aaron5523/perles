@@ -39,11 +39,6 @@ func (SystemClipboard) Copy(text string) error {
 	return nil
 }
 
-// isLocalTmux returns true if running in tmux without SSH.
-func isLocalTmux() bool {
-	return os.Getenv("TMUX") != "" && !isRemoteSession()
-}
-
 // isRemoteSession returns true if running over SSH.
 func isRemoteSession() bool {
 	return os.Getenv("SSH_TTY") != "" ||

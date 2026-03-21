@@ -2695,11 +2695,10 @@ func TestHandleSeparatorDrag_ReleaseStopsDrag(t *testing.T) {
 	m := createTestModel(t)
 	m.separatorDragging = true
 
-	result, cmd, handled := m.handleSeparatorDrag(tea.MouseMsg{
+	result, handled := m.handleSeparatorDrag(tea.MouseMsg{
 		Action: tea.MouseActionRelease,
 	})
 	require.True(t, handled)
-	require.Nil(t, cmd)
 	require.False(t, result.separatorDragging)
 }
 
@@ -2707,7 +2706,7 @@ func TestHandleSeparatorDrag_ReleaseIgnoredWhenNotDragging(t *testing.T) {
 	m := createTestModel(t)
 	m.separatorDragging = false
 
-	_, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+	_, handled := m.handleSeparatorDrag(tea.MouseMsg{
 		Action: tea.MouseActionRelease,
 	})
 	require.False(t, handled)
@@ -2718,7 +2717,7 @@ func TestHandleSeparatorDrag_MotionUpdatesPct(t *testing.T) {
 	m.separatorDragging = true
 	m.width = 200
 
-	result, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+	result, handled := m.handleSeparatorDrag(tea.MouseMsg{
 		X:      120,
 		Action: tea.MouseActionMotion,
 	})
@@ -2732,7 +2731,7 @@ func TestHandleSeparatorDrag_MotionClampsToMin(t *testing.T) {
 	m.separatorDragging = true
 	m.width = 200
 
-	result, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+	result, handled := m.handleSeparatorDrag(tea.MouseMsg{
 		X:      10, // 10 * 100 / 200 = 5, below searchMinLeftPct (20)
 		Action: tea.MouseActionMotion,
 	})
@@ -2745,7 +2744,7 @@ func TestHandleSeparatorDrag_MotionClampsToMax(t *testing.T) {
 	m.separatorDragging = true
 	m.width = 200
 
-	result, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+	result, handled := m.handleSeparatorDrag(tea.MouseMsg{
 		X:      190, // 190 * 100 / 200 = 95, above searchMaxLeftPct (80)
 		Action: tea.MouseActionMotion,
 	})
@@ -2757,7 +2756,7 @@ func TestHandleSeparatorDrag_MotionIgnoredWhenNotDragging(t *testing.T) {
 	m := createTestModel(t)
 	m.separatorDragging = false
 
-	_, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+	_, handled := m.handleSeparatorDrag(tea.MouseMsg{
 		X:      100,
 		Action: tea.MouseActionMotion,
 	})
@@ -2768,7 +2767,7 @@ func TestHandleSeparatorDrag_PressOutsideHitZone(t *testing.T) {
 	m := createTestModel(t)
 
 	// Press far from any possible separator position
-	_, _, handled := m.handleSeparatorDrag(tea.MouseMsg{
+	_, handled := m.handleSeparatorDrag(tea.MouseMsg{
 		X:      0,
 		Y:      0,
 		Button: tea.MouseButtonLeft,
