@@ -17,8 +17,8 @@ func StripOrderBy(query string) string {
 		}
 		if tok.Type == TokenOrder {
 			// Found ORDER keyword — strip everything from this position onward.
-			// tok.Pos is 1 past the token start (lexer advances pos before reading ch),
-			// so subtract 1 to get the actual start of "order".
+			// tok.Pos is 1-based (lexer increments pos before reading ch),
+			// so subtract 1 to convert to 0-based string index.
 			start := max(tok.Pos-1, 0)
 			return strings.TrimRight(query[:start], " \t")
 		}

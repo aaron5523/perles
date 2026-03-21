@@ -410,7 +410,7 @@ func TestColumn_effectiveQuery(t *testing.T) {
 			name:      "ORDER BY only, with override: replaces",
 			query:     "order by updated desc",
 			sortField: "title",
-			want:      " order by title asc",
+			want:      "order by title asc",
 		},
 		{
 			name:      "case insensitive ORDER BY, with override: strips correctly",

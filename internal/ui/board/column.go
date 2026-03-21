@@ -215,8 +215,11 @@ func (c Column) effectiveQuery() string {
 		if c.sortDesc {
 			dir = " desc"
 		}
-		query = bql.StripOrderBy(query)
-		return query + " order by " + c.sortField + dir
+		base := bql.StripOrderBy(query)
+		if base == "" {
+			return "order by " + c.sortField + dir
+		}
+		return base + " order by " + c.sortField + dir
 	}
 
 	// No user override: apply column-level default only if query lacks ORDER BY.
