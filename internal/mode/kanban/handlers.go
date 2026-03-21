@@ -556,13 +556,40 @@ func (m Model) handleColumnLoaded(msg tea.Msg) (Model, tea.Cmd) {
 			m.pendingCursor = nil
 		}
 	}
-	// Auto sync is silent, manual refresh shows toaster
+
+	return m.handlePostLoad(reloadDone)
+}
+
+// handlePostLoad processes shared state after any column load (BQL or tree) completes.
+// If DB changed during this reload cycle, triggers a re-refresh. Otherwise clears
+// refresh indicators and optionally shows a toast for manual refreshes.
+func (m Model) handlePostLoad(reloadDone bool) (Model, tea.Cmd) {
+	if reloadDone && m.dbDirty {
+		m.dbDirty = false
+		return m.HandleDBChanged()
+	}
 	m.autoRefreshed = false
 	if m.manualRefreshed && reloadDone {
 		m.manualRefreshed = false
 		return m, func() tea.Msg { return mode.ShowToastMsg{Message: "refreshed issues", Style: toaster.StyleSuccess} }
 	}
 	return m, nil
+}
+
+// refetchEditingIssueCmd loads the currently-edited issue by ID and returns
+// an editingIssueRefreshedMsg so the editor can update or close.
+func (m Model) refetchEditingIssueCmd(issueID string) tea.Cmd {
+	executor := m.services.QueryExecutor
+	return func() tea.Msg {
+		issues, err := executor.Execute(fmt.Sprintf(`id = "%s"`, issueID))
+		if err != nil {
+			return editingIssueRefreshedMsg{Err: err}
+		}
+		if len(issues) == 0 {
+			return editingIssueRefreshedMsg{} // Deleted
+		}
+		return editingIssueRefreshedMsg{Issue: &issues[0]}
+	}
 }
 
 // handleIssueSaved processes the result of a consolidated issue save.
@@ -612,25 +639,34 @@ func (m Model) handleErrMsg(msg errMsg) (Model, tea.Cmd) {
 // This is called by app.go when the centralized watcher detects changes.
 // The app handles re-subscription; this method just triggers the refresh.
 func (m Model) HandleDBChanged() (Model, tea.Cmd) {
-	// Don't refresh if already loading or not in ViewBoard
-	if m.loading || m.view != ViewBoard {
+	if m.loading {
+		m.dbDirty = true // Re-refresh after current cycle completes
 		return m, nil
 	}
 
-	// Trigger refresh
 	m.pendingCursor = m.saveCursor()
 	m.startReloadCycle()
 	m.autoRefreshed = true
 	m.manualRefreshed = false
-
-	// Invalidate other views so they reload when switched to
 	m.board = m.board.InvalidateViews()
 
-	// Only reload current view if views are configured, otherwise load all
+	var reloadCmd tea.Cmd
 	if m.board.ViewCount() > 0 {
-		return m, m.board.LoadCurrentViewCmd()
+		reloadCmd = m.board.LoadCurrentViewCmd()
+	} else {
+		reloadCmd = m.board.LoadAllColumns()
 	}
-	return m, m.board.LoadAllColumns()
+
+	return m, tea.Batch(reloadCmd, m.editingIssueRefreshCmd())
+}
+
+// editingIssueRefreshCmd returns a command to re-fetch the editing issue if the
+// issue editor is open, or nil otherwise. tea.Batch filters nil commands.
+func (m Model) editingIssueRefreshCmd() tea.Cmd {
+	if m.view == ViewEditIssue && m.editingIssue != nil {
+		return m.refetchEditingIssueCmd(m.editingIssue.ID)
+	}
+	return nil
 }
 
 // HandleManualRefresh processes a manual refresh request (from the "r" key).

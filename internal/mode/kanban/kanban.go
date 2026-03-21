@@ -81,6 +81,7 @@ type Model struct {
 	// Refresh state tracking
 	autoRefreshed   bool // Set when refresh triggered by file watcher
 	manualRefreshed bool // Set when refresh triggered by 'r' key
+	dbDirty         bool // DB changed while loading; re-refresh when cycle completes
 
 	// UI visibility toggles
 	showStatusBar bool
@@ -193,12 +194,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// Tree columns don't support SelectByID restoration; clear pending at end of cycle.
 			m.pendingCursor = nil
 		}
-		m.autoRefreshed = false
-		if m.manualRefreshed && reloadDone {
-			m.manualRefreshed = false
-			return m, func() tea.Msg { return mode.ShowToastMsg{Message: "refreshed issues", Style: toaster.StyleSuccess} }
-		}
-		return m, nil
+		return m.handlePostLoad(reloadDone)
 
 	case tea.MouseMsg:
 		// Route mouse events based on current view
@@ -222,6 +218,27 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				IssueID: msg.IssueID,
 			}
 		}
+
+	case editingIssueRefreshedMsg:
+		if msg.Err != nil {
+			// Board reload will show updated data; log for debugging.
+			log.ErrorErr(log.CatDB, "Failed to refetch editing issue", msg.Err)
+			return m, nil
+		}
+		if msg.Issue == nil {
+			// Issue was deleted externally — close editor
+			m.view = ViewBoard
+			m.editingIssue = nil
+			return m, func() tea.Msg {
+				return mode.ShowToastMsg{
+					Message: "Issue deleted externally",
+					Style:   toaster.StyleWarn,
+				}
+			}
+		}
+		// Update the editing issue reference
+		m.editingIssue = msg.Issue
+		return m, nil
 
 	case issueSavedMsg:
 		return m.handleIssueSaved(msg)
@@ -290,6 +307,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case clearRefreshIndicatorMsg:
+		// Note: dbDirty is intentionally not cleared here — it is managed by the
+		// load cycle (handlePostLoad) and must survive until the reload completes.
 		m.autoRefreshed = false
 		m.manualRefreshed = false
 		return m, nil
@@ -801,6 +820,12 @@ type viewMenuRenameMsg struct{}
 // sortFieldSelectedMsg is produced when a sort field is selected in the sort picker.
 type sortFieldSelectedMsg struct {
 	Field string // BQL field name (e.g., "priority", "created")
+}
+
+// editingIssueRefreshedMsg signals completion of an editing issue re-fetch.
+type editingIssueRefreshedMsg struct {
+	Issue *task.Issue // nil if issue was deleted
+	Err   error
 }
 
 // Async commands

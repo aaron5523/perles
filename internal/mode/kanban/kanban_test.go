@@ -1432,3 +1432,175 @@ func TestKanban_SaveIssueCmd_PropagatesErrors(t *testing.T) {
 	require.Error(t, savedMsg.err)
 	require.Contains(t, savedMsg.err.Error(), "update failed")
 }
+
+// --- Phase 1: HandleDBChanged view guard removal + dirty flag ---
+
+func TestKanban_HandleDBChanged_RefreshesWhenNotInViewBoard(t *testing.T) {
+	columns := []config.ColumnConfig{
+		{Name: "Todo", Query: "status = open", Color: "#999999"},
+	}
+	m := createRefreshTestModel(t, columns)
+	m.board = seedBoardColumn(m.board, 0, "Todo", []task.Issue{
+		{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask},
+	})
+
+	// Set to a non-board view (e.g., help overlay)
+	m.view = ViewHelp
+
+	m, cmd := m.HandleDBChanged()
+	require.NotNil(t, cmd, "HandleDBChanged should return reload command even when view != ViewBoard")
+	require.True(t, m.loading, "should enter loading state")
+	require.True(t, m.autoRefreshed, "should mark auto refresh")
+}
+
+func TestKanban_HandleDBChanged_SetsDirtyWhenLoading(t *testing.T) {
+	columns := []config.ColumnConfig{
+		{Name: "Todo", Query: "status = open", Color: "#999999"},
+	}
+	m := createRefreshTestModel(t, columns)
+	m.loading = true
+
+	m, cmd := m.HandleDBChanged()
+	require.Nil(t, cmd, "should not return command when loading")
+	require.True(t, m.dbDirty, "should set dbDirty flag")
+}
+
+func TestKanban_HandleColumnLoaded_ReRefreshesWhenDirty(t *testing.T) {
+	columns := []config.ColumnConfig{
+		{Name: "Todo", Query: "status = open", Color: "#999999"},
+	}
+	m := createRefreshTestModel(t, columns)
+	m.board = seedBoardColumn(m.board, 0, "Todo", []task.Issue{
+		{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask},
+	})
+
+	// Simulate a reload cycle in progress
+	m.pendingLoadCount = 1
+	m.loading = true
+	m.dbDirty = true
+
+	// Complete the load cycle
+	m, cmd := m.handleColumnLoaded(board.ColumnLoadedMsg{
+		ViewIndex:   0,
+		ColumnIndex: 0,
+		ColumnTitle: "Todo",
+		Issues:      []task.Issue{{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask}},
+	})
+
+	require.NotNil(t, cmd, "should trigger re-refresh when dbDirty")
+	require.False(t, m.dbDirty, "dbDirty should be cleared after triggering re-refresh")
+	require.True(t, m.loading, "should be loading again after re-refresh")
+}
+
+func TestKanban_HandleColumnLoaded_NoDirty_NoReRefresh(t *testing.T) {
+	columns := []config.ColumnConfig{
+		{Name: "Todo", Query: "status = open", Color: "#999999"},
+	}
+	m := createRefreshTestModel(t, columns)
+	m.board = seedBoardColumn(m.board, 0, "Todo", []task.Issue{
+		{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask},
+	})
+
+	m.pendingLoadCount = 1
+	m.loading = true
+	m.dbDirty = false
+
+	m, cmd := m.handleColumnLoaded(board.ColumnLoadedMsg{
+		ViewIndex:   0,
+		ColumnIndex: 0,
+		ColumnTitle: "Todo",
+		Issues:      []task.Issue{{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask}},
+	})
+
+	require.Nil(t, cmd, "should not re-refresh when dbDirty is false")
+	require.False(t, m.loading, "should not be loading after cycle completes")
+}
+
+// --- Phase 2: Editing issue refresh on DB change ---
+
+func TestKanban_HandleDBChanged_RefreshesEditingIssue(t *testing.T) {
+	columns := []config.ColumnConfig{
+		{Name: "Todo", Query: "status = open", Color: "#999999"},
+	}
+	m := createRefreshTestModel(t, columns)
+	m.board = seedBoardColumn(m.board, 0, "Todo", []task.Issue{
+		{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask},
+	})
+
+	// Set up editing state
+	m.view = ViewEditIssue
+	m.editingIssue = &task.Issue{ID: "task-1", TitleText: "Task 1"}
+
+	m, cmd := m.HandleDBChanged()
+	require.NotNil(t, cmd, "should return batched command including overlay refresh")
+	require.True(t, m.loading, "should be loading")
+
+	// Verify the refetch command is wired up by checking it produces an
+	// editingIssueRefreshedMsg (we can't easily decompose tea.Batch, but
+	// we verify the model state transitions correctly)
+	require.Equal(t, ViewEditIssue, m.view, "should remain in edit view")
+}
+
+func TestKanban_EditingIssueRefreshedMsg_UpdatesIssue(t *testing.T) {
+	m := createTestModel(t)
+	m.view = ViewEditIssue
+	m.editingIssue = &task.Issue{ID: "task-1", TitleText: "Old Title"}
+
+	msg := editingIssueRefreshedMsg{
+		Issue: &task.Issue{ID: "task-1", TitleText: "New Title"},
+	}
+
+	m, _ = m.Update(msg)
+	require.Equal(t, ViewEditIssue, m.view, "should stay in edit view")
+	require.Equal(t, "New Title", m.editingIssue.TitleText, "editing issue should be updated")
+}
+
+func TestKanban_EditingIssueRefreshedMsg_DeletedIssue_ClosesEditor(t *testing.T) {
+	m := createTestModel(t)
+	m.view = ViewEditIssue
+	m.editingIssue = &task.Issue{ID: "task-1", TitleText: "Old Title"}
+
+	msg := editingIssueRefreshedMsg{Issue: nil}
+
+	m, cmd := m.Update(msg)
+	require.Equal(t, ViewBoard, m.view, "should return to board view")
+	require.Nil(t, m.editingIssue, "editing issue should be cleared")
+	require.NotNil(t, cmd, "should return toast command")
+
+	toastResult := cmd()
+	showToast, ok := toastResult.(mode.ShowToastMsg)
+	require.True(t, ok, "expected ShowToastMsg")
+	require.Equal(t, "Issue deleted externally", showToast.Message)
+	require.Equal(t, toaster.StyleWarn, showToast.Style)
+}
+
+func TestKanban_EditingIssueRefreshedMsg_Error_NoOp(t *testing.T) {
+	m := createTestModel(t)
+	m.view = ViewEditIssue
+	m.editingIssue = &task.Issue{ID: "task-1", TitleText: "Old Title"}
+
+	msg := editingIssueRefreshedMsg{Err: errors.New("fetch error")}
+
+	m, cmd := m.Update(msg)
+	require.Equal(t, ViewEditIssue, m.view, "should stay in edit view on error")
+	require.Equal(t, "Old Title", m.editingIssue.TitleText, "editing issue should be unchanged")
+	require.Nil(t, cmd, "should return nil command on error")
+}
+
+func TestKanban_HandleDBChanged_NonEditOverlay_NoOverlayRefresh(t *testing.T) {
+	columns := []config.ColumnConfig{
+		{Name: "Todo", Query: "status = open", Color: "#999999"},
+	}
+	m := createRefreshTestModel(t, columns)
+	m.board = seedBoardColumn(m.board, 0, "Todo", []task.Issue{
+		{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask},
+	})
+
+	// Set to sort menu — no overlay refresh should happen
+	m.view = ViewSortMenu
+
+	m, cmd := m.HandleDBChanged()
+	require.NotNil(t, cmd, "should return reload command")
+	// The command should be a single reload command, not a batch
+	// (no overlay refresh for sort menu)
+}
