@@ -94,6 +94,7 @@ var Kanban = struct {
 	SearchFromColumn key.Binding
 	SwitchMode       key.Binding
 	ToggleStatus     key.Binding
+	Sort             key.Binding // Sort column (opens sort picker)
 	Dashboard        key.Binding // Open multi-workflow dashboard
 	QuitConfirm      key.Binding // Ctrl+C quit with confirmation (kanban-specific)
 }{
@@ -164,6 +165,10 @@ var Kanban = struct {
 	ToggleStatus: key.NewBinding(
 		key.WithKeys("w"),
 		key.WithHelp("w", "toggle status bar"),
+	),
+	Sort: key.NewBinding(
+		key.WithKeys("S"),
+		key.WithHelp("S", "sort column"),
 	),
 	Dashboard: key.NewBinding(
 		key.WithKeys("ctrl+o"),

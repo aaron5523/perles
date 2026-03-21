@@ -284,6 +284,21 @@ func (m Model) Column(idx int) Column {
 	return Column{}
 }
 
+// SetColumnSort sets the sort override on a BQL column and returns a command to reload it.
+// Returns nil command if the index is out of range or the column is not a BQL column.
+func (m Model) SetColumnSort(idx int, field string, desc bool) (Model, tea.Cmd) {
+	if idx < 0 || idx >= len(m.columns) {
+		return m, nil
+	}
+	col, ok := m.columns[idx].(Column)
+	if !ok {
+		return m, nil
+	}
+	col = col.SetSortOverride(field, desc)
+	m.columns[idx] = col
+	return m, col.LoadCmd(m.currentView, idx)
+}
+
 // BoardColumn returns the BoardColumn interface at the given index.
 func (m Model) BoardColumn(idx int) BoardColumn {
 	if idx < 0 || idx >= len(m.columns) {

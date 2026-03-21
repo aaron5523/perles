@@ -495,14 +495,47 @@ func (c Column) Update(msg tea.Msg) (BoardColumn, tea.Cmd) {
 	return c, cmd
 }
 
-// Title returns the formatted title with optional count for border rendering.
+// Title returns the formatted title with optional count and sort indicator for border rendering.
 // If showCounts is false, returns just the title without count.
+// If a sort override is active, includes an indicator like "↑Pri".
 func (c Column) Title() string {
+	title := c.title
+	if c.sortField != "" {
+		title += " " + c.sortIndicator()
+	}
 	// Default to showing counts if not explicitly set
 	if c.showCounts != nil && !*c.showCounts {
-		return c.title
+		return title
 	}
-	return fmt.Sprintf("%s (%d)", c.title, len(c.items))
+	return fmt.Sprintf("%s (%d)", title, len(c.items))
+}
+
+// sortIndicator returns a compact sort indicator like "↑Pri" or "↓Upd".
+func (c Column) sortIndicator() string {
+	arrow := "↑"
+	if c.sortDesc {
+		arrow = "↓"
+	}
+	return arrow + sortFieldAbbrev(c.sortField)
+}
+
+// sortFieldAbbrev returns a 3-character abbreviation for a BQL sort field.
+func sortFieldAbbrev(field string) string {
+	switch field {
+	case "priority":
+		return "Pri"
+	case "updated":
+		return "Upd"
+	case "created":
+		return "Cre"
+	case "title":
+		return "Ttl"
+	default:
+		if len(field) >= 3 {
+			return field[:3]
+		}
+		return field
+	}
 }
 
 // RightTitle returns an optional right-aligned title.

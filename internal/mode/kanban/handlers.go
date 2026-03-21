@@ -52,6 +52,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handleDeleteViewModalKey(msg)
 	case ViewViewMenu:
 		return m.handleViewMenuKey(msg)
+	case ViewSortMenu:
+		// Delegate to picker (same pattern as ViewViewMenu)
+		if msg.Type == tea.KeyCtrlC {
+			m.view = ViewBoard
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.picker, cmd = m.picker.Update(msg)
+		return m, cmd
 	case ViewDeleteColumnModal:
 		return m.handleDeleteColumnModalKey(msg)
 	case ViewRenameViewModal:
@@ -297,6 +306,50 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				Query:   query,
 			}
 		}
+
+	case key.Matches(msg, keys.Kanban.Sort):
+		// Open sort picker for focused BQL column, or show toast for tree columns
+		focusedCol := m.board.FocusedColumn()
+		cols := m.currentViewColumns()
+		if focusedCol < 0 || focusedCol >= len(cols) {
+			return m, nil
+		}
+		if cols[focusedCol].Type == "tree" {
+			return m, func() tea.Msg {
+				return mode.ShowToastMsg{
+					Message: "Sort not available for tree columns",
+					Style:   toaster.StyleWarn,
+				}
+			}
+		}
+
+		// Determine pre-selection based on current sort override
+		col := m.board.Column(focusedCol)
+		sortOptions := []picker.Option{
+			{Label: "Priority", Value: "priority"},
+			{Label: "Created", Value: "created"},
+			{Label: "Updated", Value: "updated"},
+			{Label: "Title", Value: "title"},
+		}
+		selected := -1
+		for i, opt := range sortOptions {
+			if opt.Value == col.SortField() {
+				selected = i
+				break
+			}
+		}
+
+		m.picker = picker.NewWithConfig(picker.Config{
+			Title:    "Sort Column",
+			Options:  sortOptions,
+			Selected: selected,
+			OnSelect: func(opt picker.Option) tea.Msg {
+				return sortFieldSelectedMsg{Field: opt.Value}
+			},
+			OnCancel: func() tea.Msg { return pickerCancelledMsg{} },
+		}).SetSize(m.width, m.height)
+		m.view = ViewSortMenu
+		return m, nil
 
 	case key.Matches(msg, keys.Kanban.Dashboard):
 		// Open multi-workflow dashboard

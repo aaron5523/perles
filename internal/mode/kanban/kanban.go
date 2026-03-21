@@ -40,6 +40,7 @@ const (
 	ViewRenameViewModal
 	ViewEditIssue   // Unified issue editor modal
 	ViewDeleteIssue // Delete issue confirmation modal
+	ViewSortMenu    // Sort field picker overlay
 )
 
 // cursorState tracks the current selection for restoration after refresh.
@@ -226,9 +227,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m.handleIssueSaved(msg)
 
 	case pickerCancelledMsg:
-		// Return to board view (used by view menu picker)
+		// Return to board view (used by view menu and sort pickers)
 		m.view = ViewBoard
 		return m, nil
+
+	case sortFieldSelectedMsg:
+		m.view = ViewBoard
+		focusedCol := m.board.FocusedColumn()
+		col := m.board.Column(focusedCol)
+		// Toggle direction if re-selecting the same field
+		desc := false
+		if col.SortField() == msg.Field {
+			desc = !col.SortDesc()
+		}
+		var sortCmd tea.Cmd
+		m.board, sortCmd = m.board.SetColumnSort(focusedCol, msg.Field, desc)
+		return m, sortCmd
 
 	case OpenEditMenuMsg:
 		issue := msg.Issue
@@ -783,6 +797,11 @@ type viewMenuDeleteMsg struct{}
 
 // viewMenuRenameMsg is produced when "rename view" is selected in view menu picker.
 type viewMenuRenameMsg struct{}
+
+// sortFieldSelectedMsg is produced when a sort field is selected in the sort picker.
+type sortFieldSelectedMsg struct {
+	Field string // BQL field name (e.g., "priority", "created")
+}
 
 // Async commands
 

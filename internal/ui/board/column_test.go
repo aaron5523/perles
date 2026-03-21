@@ -2,6 +2,7 @@ package board
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -356,6 +357,88 @@ func TestColumn_SortOverride_SetAndClear(t *testing.T) {
 	require.False(t, c.HasSortOverride())
 	require.Equal(t, "", c.SortField())
 	require.False(t, c.SortDesc())
+}
+
+func TestColumn_Title_WithSortIndicator(t *testing.T) {
+	tests := []struct {
+		name      string
+		title     string
+		sortField string
+		sortDesc  bool
+		items     int
+		want      string
+	}{
+		{
+			name:  "no sort override",
+			title: "Bugs",
+			items: 3,
+			want:  "Bugs (3)",
+		},
+		{
+			name:      "priority ASC",
+			title:     "Bugs",
+			sortField: "priority",
+			items:     3,
+			want:      "Bugs ↑Pri (3)",
+		},
+		{
+			name:      "updated DESC",
+			title:     "Ready",
+			sortField: "updated",
+			sortDesc:  true,
+			items:     5,
+			want:      "Ready ↓Upd (5)",
+		},
+		{
+			name:      "created ASC",
+			title:     "Done",
+			sortField: "created",
+			items:     0,
+			want:      "Done ↑Cre (0)",
+		},
+		{
+			name:      "title ASC",
+			title:     "Backlog",
+			sortField: "title",
+			items:     1,
+			want:      "Backlog ↑Ttl (1)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewColumn(tt.title)
+			issues := make([]task.Issue, tt.items)
+			for i := range issues {
+				issues[i] = task.Issue{ID: fmt.Sprintf("bd-%d", i)}
+			}
+			c = c.SetItems(issues)
+			if tt.sortField != "" {
+				c = c.SetSortOverride(tt.sortField, tt.sortDesc)
+			}
+			got := c.Title()
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSortFieldAbbrev(t *testing.T) {
+	tests := []struct {
+		field string
+		want  string
+	}{
+		{"priority", "Pri"},
+		{"updated", "Upd"},
+		{"created", "Cre"},
+		{"title", "Ttl"},
+		{"status", "sta"},
+		{"ab", "ab"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.field, func(t *testing.T) {
+			require.Equal(t, tt.want, sortFieldAbbrev(tt.field))
+		})
+	}
 }
 
 func TestColumn_effectiveQuery(t *testing.T) {
