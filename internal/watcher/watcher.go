@@ -101,10 +101,8 @@ func New(cfg Config) (*Watcher, error) {
 		return w, nil
 	}
 
-	// FS mode (or poll mode without PollFunc — fall back to fsnotify)
 	if mode == task.WatcherModePoll && cfg.PollFunc == nil {
-		log.Warn(log.CatWatcher, "Poll mode requested but PollFunc is nil, falling back to FS mode")
-		w.mode = task.WatcherModeFS
+		return nil, fmt.Errorf("watcher: PollFunc is required in poll mode")
 	}
 
 	log.Debug(log.CatWatcher, "Creating FS-mode watcher", "dbPath", cfg.DBPath, "debounce", cfg.DebounceDur)
@@ -255,18 +253,30 @@ func (w *Watcher) pollLoop() {
 	defer ticker.Stop()
 
 	var lastHash string
+	var consecutiveErrors int
 
 	for {
 		select {
 		case <-ticker.C:
 			hash, err := w.pollFunc()
 			if err != nil {
-				log.ErrorErr(log.CatWatcher, "Poll function error", err)
+				consecutiveErrors++
+				if consecutiveErrors <= 3 {
+					log.ErrorErr(log.CatWatcher, "Poll function error", err)
+				} else if consecutiveErrors == 4 {
+					log.Warn(log.CatWatcher, "Poll errors continuing, suppressing until recovery",
+						"consecutiveErrors", consecutiveErrors)
+				}
 				continue
 			}
 
+			if consecutiveErrors > 0 {
+				log.Info(log.CatWatcher, "Poll recovered after errors",
+					"consecutiveErrors", consecutiveErrors)
+				consecutiveErrors = 0
+			}
+
 			if lastHash == "" {
-				// First poll — establish baseline, don't publish
 				lastHash = hash
 				log.Debug(log.CatWatcher, "Poll baseline established", "hash", hash)
 				continue

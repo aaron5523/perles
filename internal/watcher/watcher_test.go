@@ -820,37 +820,11 @@ func TestPoll_StopCleanShutdown(t *testing.T) {
 	}
 }
 
-func TestPoll_NilPollFuncFallsBackToFS(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "beads.db")
-	err := os.WriteFile(dbPath, []byte("test"), 0644)
-	require.NoError(t, err)
-
-	// Poll mode with nil PollFunc should fall back to FS mode
-	w, err := watcher.New(watcher.Config{
-		Mode:        task.WatcherModePoll,
-		DBPath:      dbPath,
-		DebounceDur: 50 * time.Millisecond,
-		PollFunc:    nil,
+func TestPoll_NilPollFuncReturnsError(t *testing.T) {
+	_, err := watcher.New(watcher.Config{
+		Mode:     task.WatcherModePoll,
+		PollFunc: nil,
 	})
-	require.NoError(t, err)
-	defer func() { _ = w.Stop() }()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	sub := w.Broker().Subscribe(ctx)
-
-	err = w.Start()
-	require.NoError(t, err)
-
-	// Should work via fsnotify since it fell back
-	err = os.WriteFile(dbPath, []byte("modified"), 0644)
-	require.NoError(t, err)
-
-	select {
-	case evt := <-sub:
-		require.Equal(t, watcher.DBChanged, evt.Payload.Type)
-	case <-time.After(200 * time.Millisecond):
-		require.Fail(t, "expected DBChanged via FS fallback")
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PollFunc is required")
 }

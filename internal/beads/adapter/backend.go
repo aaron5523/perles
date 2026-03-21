@@ -11,7 +11,6 @@ import (
 	beads "github.com/zjrosen/perles/internal/beads/domain"
 	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
 	"github.com/zjrosen/perles/internal/cachemanager"
-	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/task"
 )
 
@@ -173,9 +172,10 @@ func detectWatcherConfig(dataDir string, db *sql.DB) task.WatcherConfig {
 func buildDoltHashPoller(db *sql.DB) func() (string, error) {
 	return func() (string, error) {
 		var hash string
-		err := db.QueryRow("SELECT DOLT_HASHOF_DB()").Scan(&hash)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		err := db.QueryRowContext(ctx, "SELECT DOLT_HASHOF_DB()").Scan(&hash)
 		if err != nil {
-			log.ErrorErr(log.CatDB, "DOLT_HASHOF_DB() query failed", err)
 			return "", err
 		}
 		return hash, nil
