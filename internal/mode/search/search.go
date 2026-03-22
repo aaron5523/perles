@@ -610,8 +610,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return result, nil
 		}
 
-		// Forward wheel events to details regardless of focus
+		// Forward wheel events to the appropriate pane
 		if mouseMsg.Button == tea.MouseButtonWheelUp || mouseMsg.Button == tea.MouseButtonWheelDown {
+			delta := 1
+			if mouseMsg.Button == tea.MouseButtonWheelUp {
+				delta = -1
+			}
+			if m.subMode == mode.SubModeTree && m.focus == FocusResults && m.tree != nil {
+				m.tree.MoveCursor(delta)
+				m.updateDetailFromTree()
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.details, cmd = m.details.Update(mouseMsg)
 			return m, cmd
@@ -1506,27 +1515,18 @@ func (m *Model) updateDetailFromTree() {
 	if node == nil {
 		return
 	}
-	_, rightWidth := m.splitWidths()
 
-	// Preserve scroll position if viewing the same issue
-	var prevOffset int
-	var sameIssue bool
-	if m.hasDetail {
-		sameIssue = m.details.IssueID() == node.Issue.ID
-		if sameIssue {
-			prevOffset = m.details.YOffset()
-		}
+	// Skip rebuild if already showing the same issue
+	if m.hasDetail && m.details.IssueID() == node.Issue.ID {
+		return
 	}
+
+	_, rightWidth := m.splitWidths()
 
 	// rightWidth-2 for left/right border, height-2 for top/bottom border
 	m.details = details.New(node.Issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 		SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
 		SetSize(rightWidth-2, m.height-2)
-
-	// Restore scroll position for same issue
-	if sameIssue {
-		m.details = m.details.SetYOffset(prevOffset)
-	}
 
 	m.hasDetail = true
 }
