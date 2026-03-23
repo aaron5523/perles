@@ -38,12 +38,25 @@ func (d Direction) String() string {
 	return string(d)
 }
 
+// Relationship describes why a node is placed under its parent in the tree.
+type Relationship int
+
+const (
+	// RelChild is the default parent-child relationship.
+	RelChild Relationship = iota
+	// RelBlocks means this node is blocked by its parent (blocking dependency).
+	RelBlocks
+	// RelDiscovered means this node was discovered from its parent.
+	RelDiscovered
+)
+
 // TreeNode represents a node in the dependency tree.
 type TreeNode struct {
-	Issue    task.Issue  // Issue data
-	Children []*TreeNode // Child nodes in tree
-	Depth    int         // Nesting level (0 = root)
-	Parent   *TreeNode   // Parent node in tree (nil for root)
+	Issue        task.Issue   // Issue data
+	Children     []*TreeNode  // Child nodes in tree
+	Depth        int          // Nesting level (0 = root)
+	Parent       *TreeNode    // Parent node in tree (nil for root)
+	Relationship Relationship // Why this node is placed under its parent
 }
 
 // BuildTree constructs a TreeNode hierarchy from an issue map.
@@ -85,27 +98,57 @@ func buildNode(
 		Parent: parent,
 	}
 
+	// relEntry pairs an issue ID with the relationship that caused its inclusion.
+	type relEntry struct {
+		id  string
+		rel Relationship
+	}
+
 	// Get related IDs based on direction and mode
-	var relatedIDs []string
+	var entries []relEntry
 	if dir == DirectionDown {
 		// Down direction
-		relatedIDs = append(relatedIDs, issue.Children...)
+		for _, id := range issue.Children {
+			entries = append(entries, relEntry{id, RelChild})
+		}
 		if mode == ModeDeps {
-			// Include dependency relationships
-			relatedIDs = append(relatedIDs, issue.Blocks...)
-			// Include discovered-from relationships (down = issues discovered from this one)
-			relatedIDs = append(relatedIDs, issue.Discovered...)
+			for _, id := range issue.Blocks {
+				entries = append(entries, relEntry{id, RelBlocks})
+			}
+			for _, id := range issue.Discovered {
+				entries = append(entries, relEntry{id, RelDiscovered})
+			}
 		}
 	} else {
 		// Up direction
 		if issue.ParentID != "" {
-			relatedIDs = append(relatedIDs, issue.ParentID)
+			entries = append(entries, relEntry{issue.ParentID, RelChild})
 		}
 		if mode == ModeDeps {
-			// Include dependency relationships
-			relatedIDs = append(relatedIDs, issue.BlockedBy...)
-			// Include discovered-from relationships (up = issues this was discovered from)
-			relatedIDs = append(relatedIDs, issue.DiscoveredFrom...)
+			for _, id := range issue.BlockedBy {
+				entries = append(entries, relEntry{id, RelBlocks})
+			}
+			for _, id := range issue.DiscoveredFrom {
+				entries = append(entries, relEntry{id, RelDiscovered})
+			}
+		}
+	}
+
+	// Build a map from ID to relationship (first occurrence wins — child over blocks/discovered)
+	relByID := make(map[string]Relationship, len(entries))
+	for _, e := range entries {
+		if _, exists := relByID[e.id]; !exists {
+			relByID[e.id] = e.rel
+		}
+	}
+
+	// Collect unique IDs preserving order
+	var relatedIDs []string
+	seen2 := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if !seen2[e.id] {
+			relatedIDs = append(relatedIDs, e.id)
+			seen2[e.id] = true
 		}
 	}
 
@@ -124,6 +167,7 @@ func buildNode(
 	for _, relatedID := range relatedIDs {
 		if relatedIssue, ok := issueMap[relatedID]; ok {
 			if child := buildNode(relatedIssue, issueMap, dir, mode, depth+1, seen, node); child != nil {
+				child.Relationship = relByID[relatedID]
 				node.Children = append(node.Children, child)
 			}
 		}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"os"
 	"runtime/debug"
 	"sync"
@@ -190,19 +191,22 @@ func log(level Level, cat Category, msg string, fields ...any) {
 
 	// Format: 2025-12-06T10:45:00 [ERROR] [bql] message key=value key2=value2
 	timestamp := time.Now().Format("2006-01-02T15:04:05")
-	entry := fmt.Sprintf("%s [%s] [%s] %s", timestamp, level, cat, msg)
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s [%s] [%s] %s", timestamp, level, cat, msg)
 
 	// Append fields (key=value pairs)
 	for i := 0; i+1 < len(fields); i += 2 {
 		key := fields[i]
 		value := fields[i+1]
-		entry += fmt.Sprintf(" %v=%v", key, value)
+		fmt.Fprintf(&sb, " %v=%v", key, value)
 	}
 	// Handle odd field count - append orphan key with no value
 	if len(fields)%2 != 0 {
-		entry += fmt.Sprintf(" %v=<missing>", fields[len(fields)-1])
+		fmt.Fprintf(&sb, " %v=<missing>", fields[len(fields)-1])
 	}
-	entry += "\n"
+	sb.WriteString("\n")
+	entry := sb.String()
 
 	// Write to file
 	if defaultLogger.writer != nil {
