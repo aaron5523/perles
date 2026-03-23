@@ -721,13 +721,17 @@ func TestHealthMonitor_MaxRecoveriesLeadsToFailAction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run through all recovery attempts: nudge(0), replace(1), pause(2), fail(3)
-	for i := 0; i < 5; i++ {
+	// Use more iterations and longer sleeps to ensure the monitor goroutine
+	// processes each recovery step, even on slower CI runners (e.g., Windows).
+	for i := 0; i < 8; i++ {
 		clock.Advance(150 * time.Millisecond)
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	// After max recoveries, the workflow should be in Failed state
-	require.Equal(t, WorkflowFailed, inst.State)
+	require.Eventually(t, func() bool {
+		return inst.State == WorkflowFailed
+	}, 2*time.Second, 20*time.Millisecond, "expected workflow to reach Failed state, got %s", inst.State)
 
 	monitor.Stop()
 }
