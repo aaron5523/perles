@@ -385,10 +385,11 @@ func (m *Model) renderNode(node *TreeNode, isLast bool, isSelected bool) string 
 	sb.WriteString(prefix)
 
 	// Relationship indicator for blocking/discovered edges
-	if node.Relationship == RelBlocks {
+	switch node.Relationship {
+	case RelBlocks:
 		blockedStyle := lipgloss.NewStyle().Foreground(styles.StatusBlockedColor)
 		sb.WriteString(blockedStyle.Render("[B]"))
-	} else if node.Relationship == RelDiscovered {
+	case RelDiscovered:
 		discoveredStyle := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 		sb.WriteString(discoveredStyle.Render("[D]"))
 	}
