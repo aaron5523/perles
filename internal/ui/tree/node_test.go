@@ -273,10 +273,12 @@ func TestBuildTree_Down_SiblingBlocking(t *testing.T) {
 	// task-tests should be a child of task-impl, not a direct child of epic
 	require.Len(t, root.Children, 1, "epic should have 1 direct child (the blocker)")
 	require.Equal(t, "task-impl", root.Children[0].Issue.ID)
+	require.Equal(t, RelChild, root.Children[0].Relationship, "task-impl is a child of epic")
 
 	// task-impl should have task-tests as its child (via blocking relationship)
 	require.Len(t, root.Children[0].Children, 1, "blocker should have blocked issue as child")
 	require.Equal(t, "task-tests", root.Children[0].Children[0].Issue.ID)
+	require.Equal(t, RelBlocks, root.Children[0].Children[0].Relationship, "task-tests is blocked by task-impl")
 
 	// Verify depths
 	require.Equal(t, 0, root.Depth)
@@ -300,14 +302,17 @@ func TestBuildTree_Down_ChainedBlocking(t *testing.T) {
 	// Epic should have only task-a as direct child (first in chain)
 	require.Len(t, root.Children, 1, "epic should have 1 direct child")
 	require.Equal(t, "task-a", root.Children[0].Issue.ID)
+	require.Equal(t, RelChild, root.Children[0].Relationship, "task-a is a child of epic")
 
-	// task-a -> task-b
+	// task-a -> task-b (via blocking)
 	require.Len(t, root.Children[0].Children, 1)
 	require.Equal(t, "task-b", root.Children[0].Children[0].Issue.ID)
+	require.Equal(t, RelBlocks, root.Children[0].Children[0].Relationship, "task-b is blocked by task-a")
 
-	// task-b -> task-c
+	// task-b -> task-c (via blocking)
 	require.Len(t, root.Children[0].Children[0].Children, 1)
 	require.Equal(t, "task-c", root.Children[0].Children[0].Children[0].Issue.ID)
+	require.Equal(t, RelBlocks, root.Children[0].Children[0].Children[0].Relationship, "task-c is blocked by task-b")
 }
 
 func TestBuildTree_Down_WithDiscovered(t *testing.T) {
@@ -323,6 +328,7 @@ func TestBuildTree_Down_WithDiscovered(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, root.Children, 1)
 	require.Equal(t, "bug-1", root.Children[0].Issue.ID)
+	require.Equal(t, RelDiscovered, root.Children[0].Relationship, "bug-1 was discovered from feature-1")
 }
 
 func TestBuildTree_Up_WithDiscoveredFrom(t *testing.T) {
