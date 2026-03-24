@@ -2273,6 +2273,11 @@ func (m Model) handleIssueSaved(msg issueSavedMsg) (Model, tea.Cmd) {
 		m.details = m.details.UpdateLabels(*msg.opts.Labels)
 	}
 
+	// Update tree nodes if in tree sub-mode
+	if m.tree != nil {
+		m.tree.UpdateIssue(msg.issueID, msg.opts)
+	}
+
 	// Refresh list items since issueItem holds Issue by value
 	items := make([]list.Item, len(m.results))
 	for i, issue := range m.results {

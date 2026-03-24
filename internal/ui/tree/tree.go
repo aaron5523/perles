@@ -298,6 +298,37 @@ func (m *Model) GoToOriginal() error {
 	return nil
 }
 
+// UpdateIssue patches the issueMap and syncs all matching tree nodes.
+// Only fields rendered in tree view (status, priority, title, labels) are applied;
+// other task.UpdateOptions fields (Description, Notes, etc.) are ignored.
+func (m *Model) UpdateIssue(issueID string, opts task.UpdateOptions) {
+	issue, ok := m.issueMap[issueID]
+	if !ok {
+		return
+	}
+
+	// Patch the canonical issueMap entry
+	if opts.Status != nil {
+		issue.Status = *opts.Status
+	}
+	if opts.Priority != nil {
+		issue.Priority = *opts.Priority
+	}
+	if opts.Title != nil {
+		issue.TitleText = *opts.Title
+	}
+	if opts.Labels != nil {
+		issue.Labels = *opts.Labels
+	}
+
+	// Sync value copies in flattened nodes from the patched source
+	for _, node := range m.nodes {
+		if node.Issue.ID == issueID {
+			node.Issue = *issue
+		}
+	}
+}
+
 // View renders the tree.
 func (m *Model) View() string {
 	if m.root == nil || len(m.nodes) == 0 {
