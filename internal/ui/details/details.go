@@ -911,6 +911,12 @@ func getTypeStyle(t task.IssueType) lipgloss.Style {
 		return styles.TypeEpicStyle
 	case task.TypeChore:
 		return styles.TypeChoreStyle
+	case task.TypeMilestone:
+		return styles.TypeMilestoneStyle
+	case task.TypeStory:
+		return styles.TypeStoryStyle
+	case task.TypeSpike:
+		return styles.TypeSpikeStyle
 	default:
 		return lipgloss.NewStyle()
 	}
@@ -1005,6 +1011,12 @@ func formatType(t task.IssueType) string {
 		return "Epic"
 	case task.TypeChore:
 		return "Chore"
+	case task.TypeMilestone:
+		return "Milestone"
+	case task.TypeStory:
+		return "Story"
+	case task.TypeSpike:
+		return "Spike"
 	default:
 		return string(t)
 	}

@@ -28,14 +28,17 @@ const (
 type IssueType string
 
 const (
-	TypeBug      IssueType = "bug"
-	TypeFeature  IssueType = "feature"
-	TypeTask     IssueType = "task"
-	TypeEpic     IssueType = "epic"
-	TypeChore    IssueType = "chore"
-	TypeMolecule IssueType = "molecule"
-	TypeConvoy   IssueType = "convoy"
-	TypeAgent    IssueType = "agent"
+	TypeBug       IssueType = "bug"
+	TypeFeature   IssueType = "feature"
+	TypeTask      IssueType = "task"
+	TypeEpic      IssueType = "epic"
+	TypeChore     IssueType = "chore"
+	TypeMilestone IssueType = "milestone"
+	TypeStory     IssueType = "story"
+	TypeSpike     IssueType = "spike"
+	TypeMolecule  IssueType = "molecule"
+	TypeConvoy    IssueType = "convoy"
+	TypeAgent     IssueType = "agent"
 )
 
 // Comment represents a comment on an issue.
@@ -69,14 +72,7 @@ type Issue struct {
 	ClosedAt           time.Time `json:"closed_at"`
 	CloseReason        string    `json:"close_reason,omitempty"`
 
-	// Agent fields (agent-as-bead pattern)
-	HookBead     string    `json:"hook_bead,omitempty"`
-	RoleBead     string    `json:"role_bead,omitempty"`
-	AgentState   string    `json:"agent_state,omitempty"`
-	LastActivity time.Time `json:"last_activity,omitzero"`
-	RoleType     string    `json:"role_type,omitempty"`
-	Rig          string    `json:"rig,omitempty"`
-	MolType      string    `json:"mol_type,omitempty"`
+	MolType string `json:"mol_type,omitempty"`
 
 	// Dependency tracking
 	BlockedBy      []string `json:"blocked_by"`

@@ -273,6 +273,9 @@ func TestDetails_View_AllTypes(t *testing.T) {
 		task.TypeTask,
 		task.TypeEpic,
 		task.TypeChore,
+		task.TypeMilestone,
+		task.TypeStory,
+		task.TypeSpike,
 	}
 
 	for _, issueType := range types {

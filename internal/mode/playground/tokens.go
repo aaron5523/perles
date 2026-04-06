@@ -122,6 +122,12 @@ func GetTokenColor(token styles.ColorToken) string {
 		return styles.IssueBugColor.Dark
 	case styles.TokenTypeFeature:
 		return styles.IssueFeatureColor.Dark
+	case styles.TokenTypeMilestone:
+		return styles.IssueMilestoneColor.Dark
+	case styles.TokenTypeStory:
+		return styles.IssueStoryColor.Dark
+	case styles.TokenTypeSpike:
+		return styles.IssueSpikeColor.Dark
 	case styles.TokenTypeMolecule:
 		return styles.IssueMoleculeColor.Dark
 	case styles.TokenTypeConvoy:
@@ -272,6 +278,9 @@ func GetTokenCategories() []TokenCategory {
 				styles.TokenTypeEpic,
 				styles.TokenTypeBug,
 				styles.TokenTypeFeature,
+				styles.TokenTypeMilestone,
+				styles.TokenTypeStory,
+				styles.TokenTypeSpike,
 				styles.TokenTypeMolecule,
 				styles.TokenTypeConvoy,
 				styles.TokenTypeAgent,

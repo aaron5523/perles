@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -36,6 +37,11 @@ type BeadsBackend struct {
 func NewBeadsBackend(dataDir, workDir string) (*BeadsBackend, error) {
 	client, err := infrabeads.NewClient(dataDir)
 	if err != nil {
+		// Check if embedded mode (exclusive lock, can't share with perles)
+		var embeddedErr *infrabeads.EmbeddedModeUnsupportedError
+		if errors.As(err, &embeddedErr) {
+			return nil, &task.EmbeddedModeError{BeadsDir: dataDir}
+		}
 		// Check if this is a Dolt server that's unreachable
 		if meta, metaErr := infrabeads.LoadMetadata(dataDir); metaErr == nil && meta.IsDoltServer() {
 			return nil, &task.ServerDownError{
@@ -146,7 +152,7 @@ func beadsCapabilities() task.BackendCapabilities {
 // DOLT_HASHOF_DB() to detect working set changes from external processes.
 func detectWatcherConfig(dataDir string, db *sql.DB) task.WatcherConfig {
 	meta, err := infrabeads.LoadMetadata(dataDir)
-	if err == nil && meta.Backend == "dolt" {
+	if err == nil && meta.IsDoltServer() {
 		// Dolt server mode: poll DOLT_HASHOF_DB() for change detection.
 		// The sentinel file approach (last-touched) is unreliable because
 		// bd does not consistently update it on write operations.

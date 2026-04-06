@@ -31,11 +31,14 @@ const (
 type IssueType string
 
 const (
-	TypeBug     IssueType = "bug"
-	TypeFeature IssueType = "feature"
-	TypeTask    IssueType = "task"
-	TypeEpic    IssueType = "epic"
-	TypeChore   IssueType = "chore"
+	TypeBug       IssueType = "bug"
+	TypeFeature   IssueType = "feature"
+	TypeTask      IssueType = "task"
+	TypeEpic      IssueType = "epic"
+	TypeChore     IssueType = "chore"
+	TypeMilestone IssueType = "milestone"
+	TypeStory     IssueType = "story"
+	TypeSpike     IssueType = "spike"
 )
 
 // Comment represents a comment on an issue.

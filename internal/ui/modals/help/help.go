@@ -29,7 +29,7 @@ type BQLOperator struct {
 func BQLFields() []BQLField {
 	return []BQLField{
 		{Name: "status", Values: "open, in_progress, closed, blocked, deferred"},
-		{Name: "type", Values: "bug, feature, task, epic, chore"},
+		{Name: "type", Values: "bug, feature, task, epic, chore, milestone, story, spike"},
 		{Name: "priority", Values: "p0, p1, p2, p3, p4"},
 		{Name: "blocked", Values: "true, false"},
 		{Name: "ready", Values: "true, false"},
@@ -44,9 +44,6 @@ func BQLFields() []BQLField {
 		{Name: "assignee", Values: "string"},
 		{Name: "sender", Values: "string"},
 		{Name: "created_by", Values: "string"},
-		{Name: "agent_state", Values: "idle, running, stuck, stopped"},
-		{Name: "role_type", Values: "polecat, crew, witness, etc."},
-		{Name: "rig", Values: "string"},
 		{Name: "mol_type", Values: "string"},
 		{Name: "created", Values: "date (today, yesterday, -7d)"},
 		{Name: "updated", Values: "date (today, yesterday, -7d)"},
