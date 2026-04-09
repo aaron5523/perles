@@ -610,17 +610,38 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return result, nil
 		}
 
-		// Forward wheel events to the appropriate pane
+		// Forward wheel events to the pane under the cursor.
+		//
+		// We compute pane bounds synchronously from splitWidths() rather than
+		// using bubblezone's zone.Get(), because bubblezone processes zone data
+		// via an async worker goroutine (see bubblezone/manager.go Scan docs):
+		// rapid wheel events can race the worker and see stale/missing zones,
+		// causing the handler to fall through to the tree-scroll path and
+		// trigger expensive details-rebuilds on every stray event.
 		if mouseMsg.Button == tea.MouseButtonWheelUp || mouseMsg.Button == tea.MouseButtonWheelDown {
-			delta := 1
-			if mouseMsg.Button == tea.MouseButtonWheelUp {
-				delta = -1
+			leftWidth, _ := m.splitWidths()
+			// Left pane occupies columns [0, leftWidth); a 1-char gap sits at
+			// column leftWidth; the details pane starts at leftWidth+1.
+			overDetails := mouseMsg.X > leftWidth
+
+			if overDetails {
+				var cmd tea.Cmd
+				m.details, cmd = m.details.Update(mouseMsg)
+				return m, cmd
 			}
+			// Mouse is over the left pane. In tree sub-mode with results focus,
+			// scroll the tree. Otherwise fall through to the default (forward
+			// to details) to preserve prior behavior in list sub-mode.
 			if m.subMode == mode.SubModeTree && m.focus == FocusResults && m.tree != nil {
+				delta := 1
+				if mouseMsg.Button == tea.MouseButtonWheelUp {
+					delta = -1
+				}
 				m.tree.MoveCursor(delta)
 				m.updateDetailFromTree()
 				return m, nil
 			}
+			// List sub-mode fallback: forward wheel events to details.
 			var cmd tea.Cmd
 			m.details, cmd = m.details.Update(mouseMsg)
 			return m, cmd

@@ -2,6 +2,7 @@ package search
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1974,6 +1975,106 @@ func TestSearch_MouseScroll_TreeSubMode_FocusDetails_ScrollsDetails(t *testing.T
 	// Tree cursor should stay at root — wheel should go to details, not tree
 	m, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
 	require.Equal(t, "root", m.tree.SelectedNode().Issue.ID, "tree cursor should not move when details is focused")
+}
+
+// TestSearch_MouseScroll_TreeSubMode_OverDetailsZone_ScrollsDetails verifies that
+// after the view is rendered (which populates bubblezone bounds via zone.Scan),
+// a wheel event whose coordinates fall inside the details pane scrolls the details
+// viewport and does NOT move the tree cursor — even when focus is on the tree/results.
+// This is the regression test for the "mouse scroll hijacked by tree" bug.
+func TestSearch_MouseScroll_TreeSubMode_OverDetailsZone_ScrollsDetails(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 120
+	m.height = 30
+	m.subMode = mode.SubModeTree
+	m.focus = FocusResults // Focus is on tree/results, NOT details
+
+	// Build a tree with enough children that cursor movement is observable
+	issueMap := map[string]*task.Issue{
+		"root":    {ID: "root", TitleText: "Root Issue", Children: []string{"child-1", "child-2", "child-3"}},
+		"child-1": {ID: "child-1", TitleText: "Child 1", ParentID: "root"},
+		"child-2": {ID: "child-2", TitleText: "Child 2", ParentID: "root"},
+		"child-3": {ID: "child-3", TitleText: "Child 3", ParentID: "root"},
+	}
+	mockClock := mocks.NewMockClock(t)
+	mockClock.EXPECT().Now().Return(time.Now()).Maybe()
+	m.tree = tree.New("root", issueMap, tree.DirectionDown, tree.ModeChildren, mockClock)
+	m.tree.SetSize(60, 28)
+
+	// Set up details with enough content to scroll
+	longDesc := ""
+	for i := 1; i <= 40; i++ {
+		longDesc += fmt.Sprintf("Line %d of description\n", i)
+	}
+	issue := task.Issue{
+		ID:              "root",
+		TitleText:       "Root Issue",
+		DescriptionText: longDesc,
+	}
+	// Small viewport guarantees scrollable content (40 lines >> 6-line viewport).
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(58, 6)
+	m.hasDetail = true
+
+	// Render the view (not required for routing since we use synchronous pane bounds,
+	// but kept to exercise the full render path).
+	_ = m.View()
+
+	// Sanity: tree cursor should start at root
+	require.Equal(t, "root", m.tree.SelectedNode().Issue.ID)
+	initialOffset := m.details.YOffset()
+
+	// Simulate a wheel-down event whose coordinates land inside the details pane.
+	// With width=120 and default split, left panel ~60 chars wide, so X=90 is solidly
+	// inside the right (details) panel; Y=10 is mid-pane.
+	m, _ = m.Update(tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown,
+		X:      90,
+		Y:      10,
+	})
+
+	// Tree cursor must not have moved
+	require.Equal(t, "root", m.tree.SelectedNode().Issue.ID,
+		"wheel over details pane must not move tree cursor")
+	// Details viewport must have scrolled down
+	require.Greater(t, m.details.YOffset(), initialOffset,
+		"wheel over details pane must scroll details viewport")
+}
+
+// TestSearch_MouseScroll_TreeSubMode_OverTreeZone_ScrollsTree verifies that a
+// wheel event whose coordinates fall inside the tree pane still moves the tree cursor.
+func TestSearch_MouseScroll_TreeSubMode_OverTreeZone_ScrollsTree(t *testing.T) {
+	m := createTestModel(t)
+	m.width = 120
+	m.height = 30
+	m.subMode = mode.SubModeTree
+	m.focus = FocusResults
+
+	issueMap := map[string]*task.Issue{
+		"root":    {ID: "root", TitleText: "Root Issue", Children: []string{"child-1", "child-2"}},
+		"child-1": {ID: "child-1", TitleText: "Child 1", ParentID: "root"},
+		"child-2": {ID: "child-2", TitleText: "Child 2", ParentID: "root"},
+	}
+	mockClock := mocks.NewMockClock(t)
+	mockClock.EXPECT().Now().Return(time.Now()).Maybe()
+	m.tree = tree.New("root", issueMap, tree.DirectionDown, tree.ModeChildren, mockClock)
+	m.tree.SetSize(60, 28)
+
+	issue := task.Issue{ID: "root", TitleText: "Root Issue", DescriptionText: "Content"}
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(58, 28)
+	m.hasDetail = true
+
+	_ = m.View()
+
+	require.Equal(t, "root", m.tree.SelectedNode().Issue.ID)
+
+	// Wheel event over the left (tree) pane: X=10 is inside the left panel.
+	m, _ = m.Update(tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown,
+		X:      10,
+		Y:      5,
+	})
+	require.Equal(t, "child-1", m.tree.SelectedNode().Issue.ID,
+		"wheel over tree pane must move tree cursor")
 }
 
 func TestSearch_MouseScroll_TreeSubMode_NilTree_FallsThrough(t *testing.T) {
