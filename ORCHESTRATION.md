@@ -20,7 +20,7 @@ This allows for structured workflow instructions that can manage and orchestrate
 
 ### Configuration
 
-The default orchestration settings use Claude Code with Opus 4.5 and by far works the best. 
+The default orchestration settings use Claude Code with Opus 4.7 and by far works the best. 
 You can customize these settings in your `~/.config/perles/config.yaml` but they are optional:
 
 ```yaml

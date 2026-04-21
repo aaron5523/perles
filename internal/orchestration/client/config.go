@@ -151,16 +151,16 @@ func (c *Config) AmpModel() string {
 	return "opus"
 }
 
-// OpenCodeModel returns the OpenCode model from Extensions, or "anthropic/claude-opus-4-6" as default.
+// OpenCodeModel returns the OpenCode model from Extensions, or "anthropic/claude-opus-4-7" as default.
 func (c *Config) OpenCodeModel() string {
 	if c.Extensions == nil {
-		return "anthropic/claude-opus-4-6"
+		return "anthropic/claude-opus-4-7"
 	}
 	if v, ok := c.Extensions[ExtOpenCodeModel].(string); ok && v != "" {
 		return v
 	}
 
-	return "anthropic/claude-opus-4-6"
+	return "anthropic/claude-opus-4-7"
 }
 
 // CursorModel returns the Cursor model from Extensions, or "" as default (uses Cursor's default).

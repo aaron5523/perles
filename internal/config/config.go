@@ -231,7 +231,7 @@ type GeminiClientConfig struct {
 
 // OpenCodeClientConfig holds OpenCode-specific settings.
 type OpenCodeClientConfig struct {
-	Model string `mapstructure:"model"` // anthropic/claude-opus-4-6 (default)
+	Model string `mapstructure:"model"` // anthropic/claude-opus-4-7 (default)
 }
 
 // CursorClientConfig holds Cursor-specific settings.
@@ -1004,7 +1004,7 @@ func Defaults() Config {
 			CoordinatorClient: "claude",
 			WorkerClient:      "claude",
 			Claude: ClaudeClientConfig{
-				Model: "claude-opus-4-6",
+				Model: "claude-opus-4-7",
 			},
 			Amp: AmpClientConfig{
 				Model: "opus",
@@ -1154,7 +1154,7 @@ orchestration:
 
   # OpenCode-specific settings (only used when client: opencode)
   opencode:
-    model: anthropic/claude-opus-4-6  # anthropic/claude-opus-4-6 (default)
+    model: anthropic/claude-opus-4-7  # anthropic/claude-opus-4-7 (default)
 
   # Cursor-specific settings (only used when client: cursor)
   # cursor:

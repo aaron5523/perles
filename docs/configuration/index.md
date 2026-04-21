@@ -57,7 +57,7 @@ Configure model and environment for each AI provider.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `orchestration.claude.model` | string | `"claude-opus-4-6"` | Claude model to use |
+| `orchestration.claude.model` | string | `"claude-opus-4-7"` | Claude model to use |
 | `orchestration.claude.env` | map | `{}` | Environment variables passed to Claude Code CLI |
 | `orchestration.claude_worker.model` | string | inherits `claude.model` | Worker-specific Claude model override |
 | `orchestration.claude_worker.env` | map | `{}` | Worker-specific environment variables |
@@ -67,7 +67,7 @@ Configure model and environment for each AI provider.
 | `orchestration.amp.mode` | string | `"smart"` | Amp execution mode (`free`, `rush`, `smart`) |
 | `orchestration.codex.model` | string | `"gpt-5.4"` | OpenAI Codex model |
 | `orchestration.gemini.model` | string | `"gemini-3-pro-preview"` | Gemini model |
-| `orchestration.opencode.model` | string | `"anthropic/claude-opus-4-6"` | OpenCode model |
+| `orchestration.opencode.model` | string | `"anthropic/claude-opus-4-7"` | OpenCode model |
 | `orchestration.cursor.model` | string | `""` | Cursor model (empty = Cursor default) |
 
 ### Tracing
@@ -166,7 +166,7 @@ orchestration:
   # observer_enabled: false
   # api_port: 0
   claude:
-    model: claude-opus-4-6
+    model: claude-opus-4-7
     # env:
     #   CUSTOM_VAR: value
   # claude_worker:

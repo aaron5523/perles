@@ -592,7 +592,7 @@ func TestDefaults_Orchestration(t *testing.T) {
 	require.Empty(t, cfg.Orchestration.Client, "legacy Client field should be empty")
 	require.Equal(t, "claude", cfg.Orchestration.CoordinatorClient)
 	require.Equal(t, "claude", cfg.Orchestration.WorkerClient)
-	require.Equal(t, "claude-opus-4-6", cfg.Orchestration.Claude.Model)
+	require.Equal(t, "claude-opus-4-7", cfg.Orchestration.Claude.Model)
 	require.Equal(t, "opus", cfg.Orchestration.Amp.Model)
 	require.Equal(t, "smart", cfg.Orchestration.Amp.Mode)
 }
