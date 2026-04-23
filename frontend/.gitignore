@@ -2,7 +2,8 @@
 node_modules/
 package-lock.json
 
-# Build output - NOT ignored because we commit pre-built assets
+# Build output - ignored at repo root (frontend/dist/ in /.gitignore).
+# CI rebuilds dist on every release; committing artifacts caused hash churn.
 # dist/
 
 # Vite cache

@@ -62,7 +62,14 @@ debug.log
 
 # Build files
 dist/
-!frontend/dist/
+
+# Generated frontend build artifacts — rebuilt on every `npm run build`.
+# Re-include the dist directory itself (the earlier `dist/` rule ignores it),
+# then ignore its contents except for the stub so //go:embed always has at
+# least one file on a fresh checkout before the frontend has been built.
+!frontend/dist
+frontend/dist/*
+!frontend/dist/.gitkeep
 
 # Dolt database files (added by bd init)
 .dolt/
